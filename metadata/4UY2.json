@@ -1,0 +1,16 @@
+{
+  "pdb_id": "4UY2",
+  "source": "https://files.rcsb.org/download/4UY2.cif",
+  "num_chains": 4,
+  "chain_ids": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "num_protein_residues": 552,
+  "num_protein_atoms": 4412,
+  "raw_file": "raw_pdb/4UY2.cif",
+  "clean_file": "clean_pdb/4UY2.pdb",
+  "status": "ok"
+}

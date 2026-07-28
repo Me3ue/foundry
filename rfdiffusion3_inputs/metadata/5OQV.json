@@ -1,0 +1,10 @@
+{
+  "pdb_id": "5OQV",
+  "source_cif": "raw_pdb/5OQV.cif",
+  "selected_chain": "A",
+  "oligomer_class": "oligomer_5plus",
+  "size_class": "large",
+  "rough_fold_class": "likely_globular",
+  "protein_chains": 9,
+  "total_chains": 9
+}

@@ -1,0 +1,23 @@
+{
+  "pdb_id": "1MDT",
+  "selected_chain": "A",
+  "chain_length": 523,
+  "fixed_ranges": [
+    [
+      87,
+      435
+    ]
+  ],
+  "diffuse_ranges": [
+    [
+      1,
+      86
+    ],
+    [
+      436,
+      523
+    ]
+  ],
+  "rationale": "dimeric target: keep the main fold core fixed; later add interface-specific masking if needed.",
+  "symmetry": null
+}

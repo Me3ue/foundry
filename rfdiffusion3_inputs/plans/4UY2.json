@@ -1,0 +1,23 @@
+{
+  "pdb_id": "4UY2",
+  "selected_chain": "A",
+  "chain_length": 203,
+  "fixed_ranges": [
+    [
+      25,
+      175
+    ]
+  ],
+  "diffuse_ranges": [
+    [
+      1,
+      24
+    ],
+    [
+      176,
+      203
+    ]
+  ],
+  "rationale": "mixed oligomer: preserve the longest chain core and diffuse external loops / short auxiliary chains in a later pass.",
+  "symmetry": null
+}

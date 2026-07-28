@@ -1,0 +1,22 @@
+{
+  "pdb_id": "5O3L",
+  "source": "https://files.rcsb.org/download/5O3L.cif",
+  "num_chains": 10,
+  "chain_ids": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J"
+  ],
+  "num_protein_residues": 730,
+  "num_protein_atoms": 11360,
+  "raw_file": "raw_pdb/5O3L.cif",
+  "clean_file": "clean_pdb/5O3L.pdb",
+  "status": "ok"
+}

@@ -1,0 +1,21 @@
+{
+  "pdb_id": "5OQV",
+  "source": "https://files.rcsb.org/download/5OQV.cif",
+  "num_chains": 9,
+  "chain_ids": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I"
+  ],
+  "num_protein_residues": 378,
+  "num_protein_atoms": 5616,
+  "raw_file": "raw_pdb/5OQV.cif",
+  "clean_file": "clean_pdb/5OQV.pdb",
+  "status": "ok"
+}

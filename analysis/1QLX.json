@@ -1,0 +1,51 @@
+{
+  "pdb_id": "1QLX",
+  "exists_raw": true,
+  "exists_clean": true,
+  "num_models": 1,
+  "num_chains": 1,
+  "protein_chains": 1,
+  "total_residues": 104,
+  "total_atoms": 1688,
+  "protein_residues": 104,
+  "hetero_residues": 0,
+  "water_residues": 0,
+  "missing_residues_hint": 0,
+  "chain_stats": [
+    {
+      "pdb_id": "1QLX",
+      "chain_id": "A",
+      "residues": 104,
+      "atoms": 1688,
+      "first_residue": "LEU125",
+      "last_residue": "ARG228",
+      "sequence": "LGGYMLGSAMSRPIIHFGSDYEDRYYRENMHRYPNQVYYRPMDEYSNQNNFVHDCVNITIKQHTVTTTTKGENFTETDVKMMERVVEQMCITQYERESQAYYQR",
+      "composition": {
+        "LEU": 2,
+        "GLY": 5,
+        "TYR": 11,
+        "MET": 7,
+        "SER": 5,
+        "ALA": 2,
+        "ARG": 8,
+        "PRO": 3,
+        "ILE": 5,
+        "HIS": 4,
+        "PHE": 3,
+        "ASP": 5,
+        "GLU": 9,
+        "ASN": 7,
+        "GLN": 7,
+        "VAL": 7,
+        "CYS": 2,
+        "THR": 9,
+        "LYS": 3
+      },
+      "is_protein": true
+    }
+  ],
+  "oligomer_class": "monomer",
+  "size_class": "medium",
+  "rough_fold_class": "mixed_or_elongated",
+  "notes": []
+}

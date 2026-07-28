@@ -1,0 +1,10 @@
+{
+  "pdb_id": "7UMQ",
+  "source_cif": "raw_pdb/7UMQ.cif",
+  "selected_chain": "J",
+  "oligomer_class": "oligomer_5plus",
+  "size_class": "large",
+  "rough_fold_class": "mixed_or_elongated",
+  "protein_chains": 10,
+  "total_chains": 10
+}

@@ -5,8 +5,8 @@ defaults:
   # Grab datasets
   - train/pdb/rfd3_train_interface@train.pdb.sub_datasets.interface
   - train/pdb/rfd3_train_pn_unit@train.pdb.sub_datasets.pn_unit
-  #- train/rfd3_monomer_distillation@train
-  
+  - train/rfd3_monomer_distillation@train
+
   # Customized validation datasets
   - val/unconditional@val.unconditional
   - val/unconditional_deep@val.unconditional_deep

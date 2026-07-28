@@ -1,0 +1,16 @@
+{
+  "pdb_id": "1ABR",
+  "source": "https://files.rcsb.org/download/1ABR.cif",
+  "num_chains": 4,
+  "chain_ids": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "num_protein_residues": 518,
+  "num_protein_atoms": 5044,
+  "raw_file": "raw_pdb/1ABR.cif",
+  "clean_file": "clean_pdb/1ABR.pdb",
+  "status": "ok"
+}

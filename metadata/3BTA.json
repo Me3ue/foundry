@@ -1,0 +1,13 @@
+{
+  "pdb_id": "3BTA",
+  "source": "https://files.rcsb.org/download/3BTA.cif",
+  "num_chains": 1,
+  "chain_ids": [
+    "A"
+  ],
+  "num_protein_residues": 1277,
+  "num_protein_atoms": 10401,
+  "raw_file": "raw_pdb/3BTA.cif",
+  "clean_file": "clean_pdb/3BTA.pdb",
+  "status": "ok"
+}

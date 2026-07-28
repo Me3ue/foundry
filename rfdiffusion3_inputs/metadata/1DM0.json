@@ -1,0 +1,10 @@
+{
+  "pdb_id": "1DM0",
+  "source_cif": "raw_pdb/1DM0.cif",
+  "selected_chain": "A",
+  "oligomer_class": "oligomer_5plus",
+  "size_class": "large",
+  "rough_fold_class": "mixed_or_elongated",
+  "protein_chains": 12,
+  "total_chains": 12
+}

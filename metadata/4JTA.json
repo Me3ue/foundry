@@ -1,0 +1,17 @@
+{
+  "pdb_id": "4JTA",
+  "source": "https://files.rcsb.org/download/4JTA.cif",
+  "num_chains": 5,
+  "chain_ids": [
+    "A",
+    "B",
+    "P",
+    "Q",
+    "Y"
+  ],
+  "num_protein_residues": 1437,
+  "num_protein_atoms": 11446,
+  "raw_file": "raw_pdb/4JTA.cif",
+  "clean_file": "clean_pdb/4JTA.pdb",
+  "status": "ok"
+}

@@ -1,0 +1,10 @@
+{
+  "pdb_id": "4JTA",
+  "source_cif": "raw_pdb/4JTA.cif",
+  "selected_chain": "B",
+  "oligomer_class": "oligomer_5plus",
+  "size_class": "large",
+  "rough_fold_class": "likely_globular",
+  "protein_chains": 5,
+  "total_chains": 5
+}

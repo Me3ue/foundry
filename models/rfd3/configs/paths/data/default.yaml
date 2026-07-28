@@ -1,18 +1,23 @@
 # path to directory with training splits
-pdb_data_dir: /projects/ml/frozen_pdb_copies/2025_07_13_pdb
-pdb_parquet_dir: /projects/ml/datahub/dfs/af3_splits/2024_12_16/  # TODO: uncomment
+pdb_data_dir: /home/zzj/protein/foundry/pdb_metadata_latest
+pdb_parquet_dir: /home/zzj/protein/foundry/pdb_metadata_latest  # TODO: uncomment
 
 # monomer distillation dataset
-monomer_distillation_data_dir: /squash/af2_distillation_facebook/
-monomer_distillation_parquet_dir: /projects/ml/datahub/dfs/distillation/af2_distillation_facebook
+monomer_distillation_data_dir: /home/zzj/protein/foundry/single_structure_data
+monomer_distillation_parquet_dir: /home/zzj/protein/foundry/single_structure_data
 
 # path to save examples that fail during the Transform pipeline (null = do not save)
 failed_examples_dir: null
 
-design_benchmark_data_dir: /projects/ml/aa_design/benchmarks
-design_model_weight_dir: /projects/ml/aa_design/models
-
+#design_benchmark_data_dir: /home/zzj/protein/foundry/single_structure_data/aa_design/benchmarks
+#design_model_weight_dir: /home/zzj/protein/foundry/single_structure_data/aa_design/models
+design_benchmark_data_dir: null
+design_model_weight_dir: null
 # path to directory with cached residue data
-residue_cache_dir: /net/tukwila/lschaaf/datahub/MACE-Egret-3-noH/mace_embeddings
+#residue_cache_dir: /net/tukwila/lschaaf/datahub/MACE-Egret-3-noH/mace_embeddings
 
-cif_cache_dir: /net/tukwila/ncorley/cifutils/cache
+#cif_cache_dir: /net/tukwila/ncorley/cifutils/cache
+
+residue_cache_dir: null
+
+cif_cache_dir: null

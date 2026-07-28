@@ -1,0 +1,236 @@
+[
+  {
+    "pdb_id": "3BTA",
+    "source": "https://files.rcsb.org/download/3BTA.cif",
+    "num_chains": 1,
+    "chain_ids": [
+      "A"
+    ],
+    "num_protein_residues": 1277,
+    "num_protein_atoms": 10401,
+    "raw_file": "raw_pdb/3BTA.cif",
+    "clean_file": "clean_pdb/3BTA.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "5N0B",
+    "source": "https://files.rcsb.org/download/5N0B.cif",
+    "num_chains": 2,
+    "chain_ids": [
+      "A",
+      "B"
+    ],
+    "num_protein_residues": 1280,
+    "num_protein_atoms": 10348,
+    "raw_file": "raw_pdb/5N0B.cif",
+    "clean_file": "clean_pdb/5N0B.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "1MDT",
+    "source": "https://files.rcsb.org/download/1MDT.cif",
+    "num_chains": 2,
+    "chain_ids": [
+      "A",
+      "B"
+    ],
+    "num_protein_residues": 1046,
+    "num_protein_atoms": 8042,
+    "raw_file": "raw_pdb/1MDT.cif",
+    "clean_file": "clean_pdb/1MDT.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "1DM0",
+    "source": "https://files.rcsb.org/download/1DM0.cif",
+    "num_chains": 12,
+    "chain_ids": [
+      "A",
+      "L",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "J",
+      "K"
+    ],
+    "num_protein_residues": 1216,
+    "num_protein_atoms": 9476,
+    "raw_file": "raw_pdb/1DM0.cif",
+    "clean_file": "clean_pdb/1DM0.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "2AAI",
+    "source": "https://files.rcsb.org/download/2AAI.cif",
+    "num_chains": 6,
+    "chain_ids": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F"
+    ],
+    "num_protein_residues": 529,
+    "num_protein_atoms": 4149,
+    "raw_file": "raw_pdb/2AAI.cif",
+    "clean_file": "clean_pdb/2AAI.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "1ABR",
+    "source": "https://files.rcsb.org/download/1ABR.cif",
+    "num_chains": 4,
+    "chain_ids": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ],
+    "num_protein_residues": 518,
+    "num_protein_atoms": 5044,
+    "raw_file": "raw_pdb/1ABR.cif",
+    "clean_file": "clean_pdb/1ABR.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "4UY2",
+    "source": "https://files.rcsb.org/download/4UY2.cif",
+    "num_chains": 4,
+    "chain_ids": [
+      "A",
+      "B",
+      "C",
+      "D"
+    ],
+    "num_protein_residues": 552,
+    "num_protein_atoms": 4412,
+    "raw_file": "raw_pdb/4UY2.cif",
+    "clean_file": "clean_pdb/4UY2.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "4JTA",
+    "source": "https://files.rcsb.org/download/4JTA.cif",
+    "num_chains": 5,
+    "chain_ids": [
+      "A",
+      "B",
+      "P",
+      "Q",
+      "Y"
+    ],
+    "num_protein_residues": 1437,
+    "num_protein_atoms": 11446,
+    "raw_file": "raw_pdb/4JTA.cif",
+    "clean_file": "clean_pdb/4JTA.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "1QLX",
+    "source": "https://files.rcsb.org/download/1QLX.cif",
+    "num_chains": 1,
+    "chain_ids": [
+      "A"
+    ],
+    "num_protein_residues": 104,
+    "num_protein_atoms": 1688,
+    "raw_file": "raw_pdb/1QLX.cif",
+    "clean_file": "clean_pdb/1QLX.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "7UMQ",
+    "source": "https://files.rcsb.org/download/7UMQ.cif",
+    "num_chains": 10,
+    "chain_ids": [
+      "J",
+      "H",
+      "D",
+      "B",
+      "F",
+      "I",
+      "G",
+      "C",
+      "A",
+      "E"
+    ],
+    "num_protein_residues": 620,
+    "num_protein_atoms": 4370,
+    "raw_file": "raw_pdb/7UMQ.cif",
+    "clean_file": "clean_pdb/7UMQ.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "5OQV",
+    "source": "https://files.rcsb.org/download/5OQV.cif",
+    "num_chains": 9,
+    "chain_ids": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I"
+    ],
+    "num_protein_residues": 378,
+    "num_protein_atoms": 5616,
+    "raw_file": "raw_pdb/5OQV.cif",
+    "clean_file": "clean_pdb/5OQV.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "5O3L",
+    "source": "https://files.rcsb.org/download/5O3L.cif",
+    "num_chains": 10,
+    "chain_ids": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "J"
+    ],
+    "num_protein_residues": 730,
+    "num_protein_atoms": 11360,
+    "raw_file": "raw_pdb/5O3L.cif",
+    "clean_file": "clean_pdb/5O3L.pdb",
+    "status": "ok"
+  },
+  {
+    "pdb_id": "6A6B",
+    "source": "https://files.rcsb.org/download/6A6B.cif",
+    "num_chains": 12,
+    "chain_ids": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E",
+      "F",
+      "G",
+      "H",
+      "I",
+      "J",
+      "K",
+      "L"
+    ],
+    "num_protein_residues": 756,
+    "num_protein_atoms": 5256,
+    "raw_file": "raw_pdb/6A6B.cif",
+    "clean_file": "clean_pdb/6A6B.pdb",
+    "status": "ok"
+  }
+]

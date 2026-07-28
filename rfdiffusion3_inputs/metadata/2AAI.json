@@ -1,0 +1,10 @@
+{
+  "pdb_id": "2AAI",
+  "source_cif": "raw_pdb/2AAI.cif",
+  "selected_chain": "A",
+  "oligomer_class": "dimer",
+  "size_class": "large",
+  "rough_fold_class": "likely_globular",
+  "protein_chains": 2,
+  "total_chains": 2
+}

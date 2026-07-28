@@ -1,0 +1,17 @@
+# @package _global_
+
+defaults:
+  - lora_finetune
+  - _self_
+
+name: lora-freeze-encoder
+
+ckpt_config:
+  path: /home/zzj/protein/foundry/models/rfd3/rfd3_latest.ckpt
+  reset_optimizer: true
+  parameter_freezing_config:
+    freeze_by_default: false
+    param_policies:
+      model.diffusion_module.encoder.*: true
+      model.diffusion_module.diffusion_transformer.*: true
+      model.diffusion_module.decoder.*: true

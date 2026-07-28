@@ -1,0 +1,23 @@
+{
+  "pdb_id": "6A6B",
+  "selected_chain": "A",
+  "chain_length": 63,
+  "fixed_ranges": [
+    [
+      8,
+      55
+    ]
+  ],
+  "diffuse_ranges": [
+    [
+      1,
+      7
+    ],
+    [
+      56,
+      63
+    ]
+  ],
+  "rationale": "highly repetitive oligomer: fix the core of each repeat unit and use symmetry-conditioned partial diffusion.",
+  "symmetry": "Cn"
+}

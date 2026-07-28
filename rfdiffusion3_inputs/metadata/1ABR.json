@@ -1,0 +1,10 @@
+{
+  "pdb_id": "1ABR",
+  "source_cif": "raw_pdb/1ABR.cif",
+  "selected_chain": "B",
+  "oligomer_class": "dimer",
+  "size_class": "large",
+  "rough_fold_class": "mixed_or_elongated",
+  "protein_chains": 2,
+  "total_chains": 2
+}

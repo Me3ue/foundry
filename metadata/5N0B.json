@@ -1,0 +1,14 @@
+{
+  "pdb_id": "5N0B",
+  "source": "https://files.rcsb.org/download/5N0B.cif",
+  "num_chains": 2,
+  "chain_ids": [
+    "A",
+    "B"
+  ],
+  "num_protein_residues": 1280,
+  "num_protein_atoms": 10348,
+  "raw_file": "raw_pdb/5N0B.cif",
+  "clean_file": "clean_pdb/5N0B.pdb",
+  "status": "ok"
+}

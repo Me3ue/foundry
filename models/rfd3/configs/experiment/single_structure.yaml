@@ -1,0 +1,73 @@
+# @package _global_
+# Day 6 — train RFD3 on a SINGLE structure, from fresh weights, and validate often so you
+# can WATCH the model improve (trash -> Top7-like).
+#
+# Copy this file into the foundry repo at:
+#     models/rfd3/configs/experiment/single_structure.yaml
+#
+# Then launch (see submit_train.sh for the cluster version). You must pass the data
+# directories you created in Exercise 4 (absolute paths):
+#     DATA=$PWD/../single_structure_data        # holds the parquet + monomer.json
+#     python models/rfd3/src/rfd3/train.py experiment=single_structure \
+#         paths.data.monomer_distillation_parquet_dir=$DATA \
+#         paths.data.monomer_distillation_data_dir=$DATA \
+#         paths.data.design_benchmark_data_dir=$DATA \
+#         paths.log_dir=$PWD/logs
+#
+# IMPORTANT: this is a STARTING POINT, not a guaranteed-correct config. Hydra keys can move
+# between foundry revisions. ALWAYS verify the resolved config before a long run:
+#     python models/rfd3/src/rfd3/train.py experiment=single_structure --cfg job | less
+# and read the config tree train.py prints at startup. See Exercise 5.
+
+defaults:
+  # Enable the monomer-distillation dataset (commented out in design_base.yaml).
+  # It reads the simple {example_id, path} parquet via GenericDFParser.
+  - /datasets/train/rfd3_monomer_distillation@datasets.train
+  - _self_
+
+name: single-structure-overfit
+
+# ---- Fresh (random) weights: this is the "reinitialise" part of the exercise ----
+ckpt_path: null
+
+# ---- Train ONLY on the single-structure monomer dataset ----
+datasets:
+  diffusion_batch_size_train: 1     # small: we are overfitting one example
+  crop_size: 128                    # >= structure length (Top7 ~92) so it is never cropped
+  max_atoms_in_crop: 512
+  train:
+    pdb:
+      null             # turn OFF the (unavailable) PDB datasets
+    monomer_distillation:
+      probability: 1.0              # train only on our single structure
+      # The monomer config sets `b_factor_min: 70` — a pLDDT threshold meant for AF2 models.
+      # A crystal structure's B-factors are temperature factors, NOT pLDDT, so leaving it at
+      # 70 can filter your structure out entirely. Set it to 0 for a real PDB.
+      dataset:
+        transform:
+          b_factor_min: 0
+  # Point ALL validation datasets at the one unconditional monomer.json you create in
+  # Exercise 4/6 (so none of them look for unavailable internal benchmark files).
+  val:
+    unconditional:
+      dataset:
+        data: ${paths.data.design_benchmark_data_dir}/monomer.json
+    unconditional_deep:
+      dataset:
+        data: ${paths.data.design_benchmark_data_dir}/monomer.json
+    indexed:
+      dataset:
+        data: ${paths.data.design_benchmark_data_dir}/monomer.json
+
+# ---- Logging: default logger (CSV). Pass `logger=wandb` on the CLI to use W&B. ----
+
+# ---- Trainer: validate and checkpoint OFTEN, and validate BEFORE training ----
+# `prevalidate: True` generates structures from the random initial weights so you can see
+# how bad the model is at step 0, then watch it improve at each later validation round.
+trainer:
+  prevalidate: False
+  n_examples_per_epoch: 20         # tiny "epoch" so validation happens frequently
+  validate_every_n_epochs: 5        # validate (= generate structures) every epoch
+  checkpoint_every_n_epochs: 10      # checkpoints are large; the live signal is validation, not ckpts
+  grad_accum_steps: 1               # single GPU
+  max_epochs: 20

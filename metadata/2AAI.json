@@ -1,0 +1,18 @@
+{
+  "pdb_id": "2AAI",
+  "source": "https://files.rcsb.org/download/2AAI.cif",
+  "num_chains": 6,
+  "chain_ids": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F"
+  ],
+  "num_protein_residues": 529,
+  "num_protein_atoms": 4149,
+  "raw_file": "raw_pdb/2AAI.cif",
+  "clean_file": "clean_pdb/2AAI.pdb",
+  "status": "ok"
+}

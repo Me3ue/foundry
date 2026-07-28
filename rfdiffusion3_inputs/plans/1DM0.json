@@ -1,0 +1,23 @@
+{
+  "pdb_id": "1DM0",
+  "selected_chain": "A",
+  "chain_length": 264,
+  "fixed_ranges": [
+    [
+      20,
+      239
+    ]
+  ],
+  "diffuse_ranges": [
+    [
+      1,
+      19
+    ],
+    [
+      240,
+      264
+    ]
+  ],
+  "rationale": "large oligomer: keep the repeated/scaffold-like middle region fixed and diffuse chain ends; add symmetry after baseline.",
+  "symmetry": null
+}

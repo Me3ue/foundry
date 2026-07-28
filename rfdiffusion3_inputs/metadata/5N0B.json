@@ -1,0 +1,10 @@
+{
+  "pdb_id": "5N0B",
+  "source_cif": "raw_pdb/5N0B.cif",
+  "selected_chain": "A",
+  "oligomer_class": "monomer",
+  "size_class": "large",
+  "rough_fold_class": "likely_globular",
+  "protein_chains": 1,
+  "total_chains": 1
+}

@@ -1,0 +1,24 @@
+{
+  "pdb_id": "1DM0",
+  "source": "https://files.rcsb.org/download/1DM0.cif",
+  "num_chains": 12,
+  "chain_ids": [
+    "A",
+    "L",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K"
+  ],
+  "num_protein_residues": 1216,
+  "num_protein_atoms": 9476,
+  "raw_file": "raw_pdb/1DM0.cif",
+  "clean_file": "clean_pdb/1DM0.pdb",
+  "status": "ok"
+}

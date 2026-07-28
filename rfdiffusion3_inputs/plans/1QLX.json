@@ -1,0 +1,23 @@
+{
+  "pdb_id": "1QLX",
+  "selected_chain": "A",
+  "chain_length": 104,
+  "fixed_ranges": [
+    [
+      10,
+      95
+    ]
+  ],
+  "diffuse_ranges": [
+    [
+      1,
+      9
+    ],
+    [
+      96,
+      104
+    ]
+  ],
+  "rationale": "small monomer: keep the compact core fixed and diffuse both termini.",
+  "symmetry": null
+}

@@ -1,0 +1,10 @@
+{
+  "pdb_id": "4UY2",
+  "source_cif": "raw_pdb/4UY2.cif",
+  "selected_chain": "A",
+  "oligomer_class": "oligomer_3_to_4",
+  "size_class": "large",
+  "rough_fold_class": "mixed_or_elongated",
+  "protein_chains": 4,
+  "total_chains": 4
+}

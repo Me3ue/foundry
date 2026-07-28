@@ -1,0 +1,23 @@
+{
+  "pdb_id": "3BTA",
+  "selected_chain": "A",
+  "chain_length": 1277,
+  "fixed_ranges": [
+    [
+      255,
+      1021
+    ]
+  ],
+  "diffuse_ranges": [
+    [
+      1,
+      254
+    ],
+    [
+      1022,
+      1277
+    ]
+  ],
+  "rationale": "single-chain globular/elongated target: freeze the central scaffold, diffuse edge loops and termini.",
+  "symmetry": null
+}

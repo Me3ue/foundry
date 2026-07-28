@@ -1,0 +1,22 @@
+{
+  "pdb_id": "7UMQ",
+  "source": "https://files.rcsb.org/download/7UMQ.cif",
+  "num_chains": 10,
+  "chain_ids": [
+    "J",
+    "H",
+    "D",
+    "B",
+    "F",
+    "I",
+    "G",
+    "C",
+    "A",
+    "E"
+  ],
+  "num_protein_residues": 620,
+  "num_protein_atoms": 4370,
+  "raw_file": "raw_pdb/7UMQ.cif",
+  "clean_file": "clean_pdb/7UMQ.pdb",
+  "status": "ok"
+}

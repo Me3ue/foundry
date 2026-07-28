@@ -1,0 +1,145 @@
+[
+  {
+    "pdb_id": "3BTA",
+    "source_cif": "raw_pdb/3BTA.cif",
+    "selected_chain": "A",
+    "oligomer_class": "monomer",
+    "size_class": "large",
+    "rough_fold_class": "mixed_or_elongated",
+    "protein_chains": 1,
+    "total_chains": 1,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "5N0B",
+    "source_cif": "raw_pdb/5N0B.cif",
+    "selected_chain": "A",
+    "oligomer_class": "monomer",
+    "size_class": "large",
+    "rough_fold_class": "likely_globular",
+    "protein_chains": 1,
+    "total_chains": 1,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "1MDT",
+    "source_cif": "raw_pdb/1MDT.cif",
+    "selected_chain": "A",
+    "oligomer_class": "dimer",
+    "size_class": "large",
+    "rough_fold_class": "mixed_or_elongated",
+    "protein_chains": 2,
+    "total_chains": 2,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "1DM0",
+    "source_cif": "raw_pdb/1DM0.cif",
+    "selected_chain": "A",
+    "oligomer_class": "oligomer_5plus",
+    "size_class": "large",
+    "rough_fold_class": "mixed_or_elongated",
+    "protein_chains": 12,
+    "total_chains": 12,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "2AAI",
+    "source_cif": "raw_pdb/2AAI.cif",
+    "selected_chain": "A",
+    "oligomer_class": "dimer",
+    "size_class": "large",
+    "rough_fold_class": "likely_globular",
+    "protein_chains": 2,
+    "total_chains": 2,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "1ABR",
+    "source_cif": "raw_pdb/1ABR.cif",
+    "selected_chain": "B",
+    "oligomer_class": "dimer",
+    "size_class": "large",
+    "rough_fold_class": "mixed_or_elongated",
+    "protein_chains": 2,
+    "total_chains": 2,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "4UY2",
+    "source_cif": "raw_pdb/4UY2.cif",
+    "selected_chain": "A",
+    "oligomer_class": "oligomer_3_to_4",
+    "size_class": "large",
+    "rough_fold_class": "mixed_or_elongated",
+    "protein_chains": 4,
+    "total_chains": 4,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "4JTA",
+    "source_cif": "raw_pdb/4JTA.cif",
+    "selected_chain": "B",
+    "oligomer_class": "oligomer_5plus",
+    "size_class": "large",
+    "rough_fold_class": "likely_globular",
+    "protein_chains": 5,
+    "total_chains": 5,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "1QLX",
+    "source_cif": "raw_pdb/1QLX.cif",
+    "selected_chain": "A",
+    "oligomer_class": "monomer",
+    "size_class": "medium",
+    "rough_fold_class": "mixed_or_elongated",
+    "protein_chains": 1,
+    "total_chains": 1,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "7UMQ",
+    "source_cif": "raw_pdb/7UMQ.cif",
+    "selected_chain": "J",
+    "oligomer_class": "oligomer_5plus",
+    "size_class": "large",
+    "rough_fold_class": "mixed_or_elongated",
+    "protein_chains": 10,
+    "total_chains": 10,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "5OQV",
+    "source_cif": "raw_pdb/5OQV.cif",
+    "selected_chain": "A",
+    "oligomer_class": "oligomer_5plus",
+    "size_class": "large",
+    "rough_fold_class": "likely_globular",
+    "protein_chains": 9,
+    "total_chains": 9,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "5O3L",
+    "source_cif": "raw_pdb/5O3L.cif",
+    "selected_chain": "A",
+    "oligomer_class": "oligomer_5plus",
+    "size_class": "large",
+    "rough_fold_class": "mixed_or_elongated",
+    "protein_chains": 10,
+    "total_chains": 10,
+    "status": "ok"
+  },
+  {
+    "pdb_id": "6A6B",
+    "source_cif": "raw_pdb/6A6B.cif",
+    "selected_chain": "A",
+    "oligomer_class": "oligomer_5plus",
+    "size_class": "large",
+    "rough_fold_class": "mixed_or_elongated",
+    "protein_chains": 12,
+    "total_chains": 12,
+    "status": "ok"
+  }
+]

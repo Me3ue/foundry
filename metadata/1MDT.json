@@ -1,0 +1,14 @@
+{
+  "pdb_id": "1MDT",
+  "source": "https://files.rcsb.org/download/1MDT.cif",
+  "num_chains": 2,
+  "chain_ids": [
+    "A",
+    "B"
+  ],
+  "num_protein_residues": 1046,
+  "num_protein_atoms": 8042,
+  "raw_file": "raw_pdb/1MDT.cif",
+  "clean_file": "clean_pdb/1MDT.pdb",
+  "status": "ok"
+}

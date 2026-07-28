@@ -1,0 +1,124 @@
+{
+  "5OQV": {
+    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/5OQV_A.pdb",
+    "select_fixed_atoms": {
+      "A1": "BKBN",
+      "A42": "BKBN"
+    },
+    "select_unfixed_sequence": "A2-41",
+    "partial_t": 1.0,
+    "symmetry": {
+      "kind": "symmetry",
+      "type": "Cn"
+    },
+    "dialect": 2,
+    "extra": {
+      "pdb_id": "5OQV",
+      "selected_chain": "A",
+      "valid_residue_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42
+      ],
+      "window_residue_ids": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41
+      ],
+      "fixed_ranges": [
+        [
+          1,
+          1
+        ],
+        [
+          42,
+          42
+        ]
+      ],
+      "diffuse_ranges": [
+        [
+          2,
+          41
+        ]
+      ],
+      "symmetry_enabled": true,
+      "note": "fixed core + diffused complement with aligned experiment semantics"
+    }
+  }
+}

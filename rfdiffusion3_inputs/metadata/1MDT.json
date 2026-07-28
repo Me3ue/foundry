@@ -1,0 +1,10 @@
+{
+  "pdb_id": "1MDT",
+  "source_cif": "raw_pdb/1MDT.cif",
+  "selected_chain": "A",
+  "oligomer_class": "dimer",
+  "size_class": "large",
+  "rough_fold_class": "mixed_or_elongated",
+  "protein_chains": 2,
+  "total_chains": 2
+}

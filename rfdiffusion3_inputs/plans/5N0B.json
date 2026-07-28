@@ -1,0 +1,23 @@
+{
+  "pdb_id": "5N0B",
+  "selected_chain": "A",
+  "chain_length": 1280,
+  "fixed_ranges": [
+    [
+      256,
+      1024
+    ]
+  ],
+  "diffuse_ranges": [
+    [
+      1,
+      255
+    ],
+    [
+      1025,
+      1280
+    ]
+  ],
+  "rationale": "single-chain globular/elongated target: freeze the central scaffold, diffuse edge loops and termini.",
+  "symmetry": null
+}

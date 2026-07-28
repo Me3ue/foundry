@@ -1,0 +1,49 @@
+defaults:
+  - train/pdb/rfd3_train_interface@train.pdb.sub_datasets.interface
+  - _self_
+
+# Local finetune dataset override. The intent is to point the existing PDB
+# interface pipeline at a small, user-owned sample set without changing model code.
+
+global_transform_args:
+  association_scheme: dense
+
+train:
+  pdb:
+    sub_datasets:
+      interface:
+        probability: 1.0
+        dataset:
+          dataset_parser:
+            base_dir: ${paths.data.pdb_data_dir}
+          dataset:
+            data: ${paths.data.pdb_parquet_dir}/interfaces_df.parquet
+            filters:
+              - "deposition_date < '2026-12-31'"
+              - "resolution < 9.0"
+              - "num_polymer_pn_units <= 300"
+              - "cluster.notnull()"
+              - "is_inter_molecule"
+            columns_to_load:
+              - example_id
+              - pdb_id
+              - assembly_id
+              - deposition_date
+              - resolution
+              - num_polymer_pn_units
+              - method
+              - cluster
+              - n_prot
+              - n_nuc
+              - n_ligand
+              - n_peptide
+              - pn_unit_1_iid
+              - pn_unit_2_iid
+              - pn_unit_1_non_polymer_res_names
+              - pn_unit_2_non_polymer_res_names
+              - is_inter_molecule
+              - all_pn_unit_iids_after_processing
+              - involves_loi
+        transform:
+          crop_contiguous_probability: 0.0
+          crop_spatial_probability: 1.0

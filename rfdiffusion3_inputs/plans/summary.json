@@ -1,0 +1,301 @@
+[
+  {
+    "pdb_id": "3BTA",
+    "selected_chain": "A",
+    "chain_length": 1277,
+    "fixed_ranges": [
+      [
+        255,
+        1021
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        254
+      ],
+      [
+        1022,
+        1277
+      ]
+    ],
+    "rationale": "single-chain globular/elongated target: freeze the central scaffold, diffuse edge loops and termini.",
+    "symmetry": null
+  },
+  {
+    "pdb_id": "5N0B",
+    "selected_chain": "A",
+    "chain_length": 1280,
+    "fixed_ranges": [
+      [
+        256,
+        1024
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        255
+      ],
+      [
+        1025,
+        1280
+      ]
+    ],
+    "rationale": "single-chain globular/elongated target: freeze the central scaffold, diffuse edge loops and termini.",
+    "symmetry": null
+  },
+  {
+    "pdb_id": "1MDT",
+    "selected_chain": "A",
+    "chain_length": 523,
+    "fixed_ranges": [
+      [
+        87,
+        435
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        86
+      ],
+      [
+        436,
+        523
+      ]
+    ],
+    "rationale": "dimeric target: keep the main fold core fixed; later add interface-specific masking if needed.",
+    "symmetry": null
+  },
+  {
+    "pdb_id": "1DM0",
+    "selected_chain": "A",
+    "chain_length": 264,
+    "fixed_ranges": [
+      [
+        20,
+        239
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        19
+      ],
+      [
+        240,
+        264
+      ]
+    ],
+    "rationale": "large oligomer: keep the repeated/scaffold-like middle region fixed and diffuse chain ends; add symmetry after baseline.",
+    "symmetry": null
+  },
+  {
+    "pdb_id": "2AAI",
+    "selected_chain": "A",
+    "chain_length": 267,
+    "fixed_ranges": [
+      [
+        44,
+        222
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        43
+      ],
+      [
+        223,
+        267
+      ]
+    ],
+    "rationale": "dimeric target: keep the main fold core fixed; later add interface-specific masking if needed.",
+    "symmetry": null
+  },
+  {
+    "pdb_id": "1ABR",
+    "selected_chain": "B",
+    "chain_length": 267,
+    "fixed_ranges": [
+      [
+        44,
+        222
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        43
+      ],
+      [
+        223,
+        267
+      ]
+    ],
+    "rationale": "dimeric target: keep the main fold core fixed; later add interface-specific masking if needed.",
+    "symmetry": null
+  },
+  {
+    "pdb_id": "4UY2",
+    "selected_chain": "A",
+    "chain_length": 203,
+    "fixed_ranges": [
+      [
+        25,
+        175
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        24
+      ],
+      [
+        176,
+        203
+      ]
+    ],
+    "rationale": "mixed oligomer: preserve the longest chain core and diffuse external loops / short auxiliary chains in a later pass.",
+    "symmetry": null
+  },
+  {
+    "pdb_id": "4JTA",
+    "selected_chain": "B",
+    "chain_length": 386,
+    "fixed_ranges": [
+      [
+        20,
+        361
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        19
+      ],
+      [
+        362,
+        386
+      ]
+    ],
+    "rationale": "large oligomer: keep the repeated/scaffold-like middle region fixed and diffuse chain ends; add symmetry after baseline.",
+    "symmetry": null
+  },
+  {
+    "pdb_id": "1QLX",
+    "selected_chain": "A",
+    "chain_length": 104,
+    "fixed_ranges": [
+      [
+        10,
+        95
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        9
+      ],
+      [
+        96,
+        104
+      ]
+    ],
+    "rationale": "small monomer: keep the compact core fixed and diffuse both termini.",
+    "symmetry": null
+  },
+  {
+    "pdb_id": "7UMQ",
+    "selected_chain": "J",
+    "chain_length": 62,
+    "fixed_ranges": [
+      [
+        8,
+        54
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        7
+      ],
+      [
+        55,
+        62
+      ]
+    ],
+    "rationale": "highly repetitive oligomer: fix the core of each repeat unit and use symmetry-conditioned partial diffusion.",
+    "symmetry": "Cn"
+  },
+  {
+    "pdb_id": "5OQV",
+    "selected_chain": "A",
+    "chain_length": 42,
+    "fixed_ranges": [
+      [
+        8,
+        34
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        7
+      ],
+      [
+        35,
+        42
+      ]
+    ],
+    "rationale": "highly repetitive oligomer: fix the core of each repeat unit and use symmetry-conditioned partial diffusion.",
+    "symmetry": "Cn"
+  },
+  {
+    "pdb_id": "5O3L",
+    "selected_chain": "A",
+    "chain_length": 73,
+    "fixed_ranges": [
+      [
+        8,
+        65
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        7
+      ],
+      [
+        66,
+        73
+      ]
+    ],
+    "rationale": "highly repetitive oligomer: fix the core of each repeat unit and use symmetry-conditioned partial diffusion.",
+    "symmetry": "Cn"
+  },
+  {
+    "pdb_id": "6A6B",
+    "selected_chain": "A",
+    "chain_length": 63,
+    "fixed_ranges": [
+      [
+        8,
+        55
+      ]
+    ],
+    "diffuse_ranges": [
+      [
+        1,
+        7
+      ],
+      [
+        56,
+        63
+      ]
+    ],
+    "rationale": "highly repetitive oligomer: fix the core of each repeat unit and use symmetry-conditioned partial diffusion.",
+    "symmetry": "Cn"
+  }
+]

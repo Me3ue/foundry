@@ -1,0 +1,23 @@
+{
+  "pdb_id": "4JTA",
+  "selected_chain": "B",
+  "chain_length": 386,
+  "fixed_ranges": [
+    [
+      20,
+      361
+    ]
+  ],
+  "diffuse_ranges": [
+    [
+      1,
+      19
+    ],
+    [
+      362,
+      386
+    ]
+  ],
+  "rationale": "large oligomer: keep the repeated/scaffold-like middle region fixed and diffuse chain ends; add symmetry after baseline.",
+  "symmetry": null
+}

@@ -1,0 +1,16 @@
+# @package _global_
+
+defaults:
+  - lora_finetune
+  - _self_
+
+name: lora-head-only
+
+ckpt_config:
+  path: /home/zzj/protein/foundry/models/rfd3/rfd3_latest.ckpt
+  reset_optimizer: true
+  parameter_freezing_config:
+    freeze_by_default: true
+    param_policies:
+      model.diffusion_module.sequence_head.*: false
+      model.diffusion_module.to_r_update.*: false

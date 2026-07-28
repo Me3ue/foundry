@@ -1,0 +1,24 @@
+{
+  "pdb_id": "6A6B",
+  "source": "https://files.rcsb.org/download/6A6B.cif",
+  "num_chains": 12,
+  "chain_ids": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L"
+  ],
+  "num_protein_residues": 756,
+  "num_protein_atoms": 5256,
+  "raw_file": "raw_pdb/6A6B.cif",
+  "clean_file": "clean_pdb/6A6B.pdb",
+  "status": "ok"
+}
