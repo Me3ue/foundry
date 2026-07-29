@@ -1,0 +1,19 @@
+# @package _global_
+
+defaults:
+  - lora_finetune_pdb
+  - _self_
+
+name: lora-freeze-input-pdb
+
+ckpt_config:
+  path: /home/zzj/protein/foundry/models/rfd3/rfd3_latest.ckpt
+  reset_optimizer: true
+  parameter_freezing_config:
+    freeze_by_default: false
+    param_policies:
+      model.token_initializer.*: true
+      model.diffusion_module.process_r.*: true
+      model.diffusion_module.process_n.*: true
+      model.diffusion_module.process_a.*: true
+      model.diffusion_module.process_c.*: true
