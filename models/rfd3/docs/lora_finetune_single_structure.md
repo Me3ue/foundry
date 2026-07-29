@@ -505,7 +505,7 @@ python models/rfd3/src/rfd3/train.py \
   paths.data.design_benchmark_data_dir="/home/zzj/protein/foundry/single_structure_data" \
   paths.log_dir="/home/zzj/protein/foundry/logs/train" \
   logger=csv \
-  ckpt_path="/home/zzj/protein/foundry/models/rfd3/rfd3_latest.ckpt"
+  ckpt_path="/media/zzj/Data/pdb_metadata_latest/rfd3_latest.ckpt"
 ```
 
 如果你想从随机权重开始，就把 `ckpt_path` 去掉，或者保持 `single_structure.yaml` 里的 `ckpt_path: null`。
