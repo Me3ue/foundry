@@ -67,7 +67,7 @@ datasets:
 trainer:
   prevalidate: False
   n_examples_per_epoch: 20         # tiny "epoch" so validation happens frequently
-  validate_every_n_epochs: 5        # validate (= generate structures) every epoch
+  validate_every_n_epochs: 1        # validate (= generate structures) every epoch
   checkpoint_every_n_epochs: 10      # checkpoints are large; the live signal is validation, not ckpts
   grad_accum_steps: 1               # single GPU
-  max_epochs: 20
+  max_epochs: 50

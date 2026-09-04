@@ -1,9 +1,12 @@
 #!/usr/bin/env -S /bin/sh -c '"$(dirname "$0")/../../../../.ipd/shebang/rfd3_exec.sh" "$0" "$@"'
 
+import json
 import logging
 import os
 from collections.abc import Callable
 from copy import deepcopy
+from pathlib import Path
+from typing import Any
 
 import hydra
 import rootutils
@@ -17,14 +20,10 @@ from foundry.utils.weights import (
     WeightLoadingConfig,
 )
 
-# Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
-# NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-
 load_dotenv(override=True)
 
 _config_path = os.path.join(os.environ["PROJECT_ROOT"], "models/rfd3/configs")
-
 _spawning_process_logger = logging.getLogger(__name__)
 
 
@@ -47,22 +46,29 @@ def _import_lora_utils() -> tuple[Callable, Callable]:
         return inject_lora_into_model, count_trainable_parameters
 
 
+def _import_nmf_utils() -> tuple[Callable, Callable]:
+    try:
+        from rfd3.nmf import inject_nmf_into_model, count_trainable_parameters
+
+        return inject_nmf_into_model, count_trainable_parameters
+    except ModuleNotFoundError:
+        from nmf import inject_nmf_into_model, count_trainable_parameters
+
+        return inject_nmf_into_model, count_trainable_parameters
+
+
 def _apply_lora_if_enabled(cfg: DictConfig, trainer) -> None:
     if not (cfg.get("lora", None) and cfg.lora.enabled):
         return
 
     inject_lora_into_model, count_trainable_parameters = _import_lora_utils()
-
     model = trainer.state["model"]
     base_model = _unwrap_model(model)
 
     ranked_logger = logging.getLogger(__name__)
-    ranked_logger.info(
-        f"Applying LoRA to base model type: {type(base_model).__name__}"
-    )
+    ranked_logger.info(f"Applying LoRA to base model type: {type(base_model).__name__}")
 
     lora_root_model = deepcopy(base_model)
-
     if not hasattr(lora_root_model, "diffusion_module"):
         raise AttributeError(
             f"Expected the base model to expose `diffusion_module`, but got {type(lora_root_model).__name__}."
@@ -106,7 +112,83 @@ def _apply_lora_if_enabled(cfg: DictConfig, trainer) -> None:
         f"LoRA enabled: trainable params={trainable:,} / total params={total:,} "
         f"({100.0 * trainable / total:.4f}%)"
     )
-    _log_trainable_parameters(lora_root_model, title="LoRA trainable parameter summary")
+    ranked_logger.info("LoRA trainable parameter summary")
+
+
+def _apply_nmf_if_enabled(cfg: DictConfig, trainer) -> None:
+    if not (cfg.get("nmf", None) and cfg.nmf.enabled):
+        return
+
+    inject_nmf_into_model, count_trainable_parameters = _import_nmf_utils()
+    model = trainer.state["model"]
+    base_model = _unwrap_model(model)
+
+    ranked_logger = logging.getLogger(__name__)
+    ranked_logger.info(f"Applying replacement NMF to base model type: {type(base_model).__name__}")
+
+    nmf_root_model = deepcopy(base_model)
+    if not hasattr(nmf_root_model, "diffusion_module"):
+        raise AttributeError(
+            f"Expected the base model to expose `diffusion_module`, but got {type(nmf_root_model).__name__}."
+        )
+
+    nmf_root_model.diffusion_module, nmf_records = inject_nmf_into_model(
+        nmf_root_model.diffusion_module,
+        target_keywords=cfg.nmf.target_keywords,
+        rank=cfg.nmf.rank,
+        nmf_alpha=cfg.nmf.alpha,
+        nmf_eps=cfg.nmf.eps,
+        freeze_all=True,
+    )
+
+    if hasattr(model, "model"):
+        model.model = nmf_root_model
+    else:
+        trainer.state["model"] = nmf_root_model
+
+    if hasattr(model, "shadow"):
+        model.shadow = deepcopy(nmf_root_model)
+
+    trainer.state["model"] = model
+
+    trainable, total = count_trainable_parameters(nmf_root_model)
+    ranked_logger.info(
+        f"NMF enabled: trainable params={trainable:,} / total params={total:,} "
+        f"({100.0 * trainable / total:.4f}%)"
+    )
+    ranked_logger.info("NMF replacement summary:")
+    for rec in nmf_records:
+        ranked_logger.info(
+            f"  - {rec.module_name} [{rec.module_type}] in={rec.in_features} out={rec.out_features} "
+            f"rank={rec.rank} base_params={rec.base_params:,} nmf_params={rec.nmf_params:,} "
+            f"delta={rec.reduction:+,}"
+        )
+
+    nmf_dump = {
+        "enabled": True,
+        "target_keywords": list(cfg.nmf.target_keywords),
+        "rank": int(cfg.nmf.rank),
+        "alpha": float(cfg.nmf.alpha),
+        "eps": float(cfg.nmf.eps),
+        "records": [
+            {
+                "module_name": rec.module_name,
+                "module_type": rec.module_type,
+                "in_features": rec.in_features,
+                "out_features": rec.out_features,
+                "rank": rec.rank,
+                "base_params": rec.base_params,
+                "nmf_params": rec.nmf_params,
+                "reduction": rec.reduction,
+            }
+            for rec in nmf_records
+        ],
+    }
+    sweep_dir = Path(cfg.paths.log_dir)
+    dump_path = sweep_dir / f"{getattr(cfg, 'name', 'nmf')}.nmf_replacements.json"
+    dump_path.write_text(json.dumps(nmf_dump, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    ranked_logger.info(f"Wrote NMF replacement JSON to {dump_path}")
+    _log_trainable_parameters(nmf_root_model, title="NMF trainable parameter summary")
 
 
 def _build_weight_loading_config(raw_cfg) -> WeightLoadingConfig | None:
@@ -144,6 +226,126 @@ def _log_trainable_parameters(model, title: str = "Trainable parameter summary")
     for name, param in model.named_parameters():
         if param.requires_grad:
             print(name, param.shape)
+
+
+def _get_run_summary_path(cfg: DictConfig, trainer) -> Path:
+    log_dir = Path(cfg.paths.log_dir)
+    run_name = str(getattr(cfg, "name", "run"))
+    global_step = trainer.state.get("global_step", None)
+    if global_step is not None:
+        return log_dir / f"{run_name}.step{global_step}.run_summary.json"
+    return log_dir / f"{run_name}.run_summary.json"
+
+
+def _safe_jsonable(value: Any):
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _safe_jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_safe_jsonable(v) for v in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def _scan_metrics_csv(log_dir: Path) -> tuple[Path | None, list[dict[str, str]]]:
+    cands = list(log_dir.glob("**/lightning_logs/**/metrics.csv"))
+    if not cands:
+        return None, []
+    metrics_csv = max(cands, key=lambda p: p.stat().st_mtime)
+    try:
+        import csv
+
+        with metrics_csv.open(newline="") as f:
+            rows = list(csv.DictReader(f))
+    except Exception:
+        rows = []
+    return metrics_csv, rows
+
+
+def _last_float(rows: list[dict[str, str]], *keys: str):
+    last = None
+    for row in rows:
+        for key in keys:
+            v = row.get(key, "")
+            if v in (None, ""):
+                continue
+            try:
+                last = float(v)
+                break
+            except ValueError:
+                continue
+    return last
+
+
+def _best_epoch_from_rows(rows: list[dict[str, str]]):
+    scored = []
+    for row in rows:
+        epoch = row.get("epoch") or row.get("trainer/global_step") or row.get("step")
+        try:
+            epoch = int(float(epoch)) if epoch not in (None, "") else None
+        except ValueError:
+            epoch = None
+        if epoch is None:
+            continue
+        loss = row.get("val/total_loss") or row.get("train/per_epoch_total_loss")
+        lddt = row.get("val/mean_lddt") or row.get("train/per_epoch_mean_lddt_protein")
+        try:
+            loss_f = float(loss) if loss not in (None, "") else None
+        except ValueError:
+            loss_f = None
+        try:
+            lddt_f = float(lddt) if lddt not in (None, "") else None
+        except ValueError:
+            lddt_f = None
+        if loss_f is not None or lddt_f is not None:
+            scored.append((epoch, loss_f, lddt_f))
+    if not scored:
+        return None, None, None
+    scored.sort(key=lambda x: (float('inf') if x[1] is None else x[1], float('-inf') if x[2] is None else -x[2], x[0]))
+    return scored[0]
+
+
+def _write_run_summary(cfg: DictConfig, trainer, extra: dict[str, Any]) -> Path:
+    summary_path = _get_run_summary_path(cfg, trainer)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+
+    model = _unwrap_model(trainer.state["model"])
+    trainable, total = (None, None)
+    try:
+        trainable, total = (sum(p.numel() for p in model.parameters() if p.requires_grad), sum(p.numel() for p in model.parameters()))
+    except Exception:
+        pass
+
+    current_epoch = trainer.state.get("current_epoch", None)
+    global_step = trainer.state.get("global_step", None)
+
+    metrics = extra.get("metrics", {})
+    payload = {
+        "name": str(getattr(cfg, "name", "run")),
+        "run_dir": str(Path(cfg.paths.log_dir)),
+        "current_epoch": current_epoch,
+        "global_step": global_step,
+        "trainable_params": trainable,
+        "total_params": total,
+        "status": extra.get("status", "unknown"),
+        "best_epoch": extra.get("best_epoch"),
+        "best_epoch_loss": extra.get("best_epoch_loss"),
+        "best_epoch_lddt": extra.get("best_epoch_lddt"),
+        "final_epoch": extra.get("final_epoch", current_epoch),
+        "final_epoch_loss": extra.get("final_epoch_loss"),
+        "final_epoch_lddt": extra.get("final_epoch_lddt"),
+        "best_val_lddt": metrics.get("best_val_lddt", extra.get("best_val_lddt")),
+        "best_val_loss": metrics.get("best_val_loss", extra.get("best_val_loss")),
+        "final_val_lddt": metrics.get("final_val_lddt", extra.get("final_val_lddt")),
+        "final_val_loss": metrics.get("final_val_loss", extra.get("final_val_loss")),
+        "metrics": _safe_jsonable(metrics),
+        "nmf": _safe_jsonable(extra.get("nmf", {})),
+        "lora": _safe_jsonable(extra.get("lora", {})),
+    }
+    summary_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return summary_path
 
 
 def _build_ckpt_config(cfg: DictConfig) -> CheckpointConfig | None:
@@ -193,19 +395,12 @@ def _wrap_checkpoint_loader_for_lora(cfg: DictConfig, trainer) -> None:
 
 @hydra.main(config_path=_config_path, config_name="train", version_base="1.3")
 def train(cfg: DictConfig) -> None:
-    # ==============================================================================
-    # Import dependencies and resolve Hydra configuration
-    # ==============================================================================
-
     _spawning_process_logger.info("Importing dependencies...")
 
-    # Lazy imports to make config generation fast
     import torch
     from lightning.fabric import seed_everything
     from lightning.fabric.loggers import Logger
 
-    # If training on DIGS L40, set precision of matrix multiplication to balance speed and accuracy
-    # Reference: https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html#torch.set_float32_matmul_precision
     torch.set_float32_matmul_precision("medium")
 
     from foundry.callbacks.callback import BaseCallback  # noqa
@@ -224,27 +419,17 @@ def train(cfg: DictConfig) -> None:
     )  # noqa
 
     set_accelerator_based_on_availability(cfg)
-
     ranked_logger = RankedLogger(__name__, rank_zero_only=True)
     _spawning_process_logger.info("Completed dependency imports ...")
 
-    # ... print the configuration tree (NOTE: Only prints for rank 0)
     print_config_tree(cfg, resolve=True)
 
-    # ==============================================================================
-    # Logging and Callback instantiation
-    # ==============================================================================
-
-    # Reduce the logging level for all dataset and sampler loggers (unless rank 0)
-    # We will still see messages from Rank 0; they are identical, since all ranks load and sample from the same datasets
     if not is_rank_zero():
         dataset_logger = logging.getLogger("datasets")
         sampler_logger = logging.getLogger("atomworks.ml.samplers")
         dataset_logger.setLevel(logging.WARNING)
         sampler_logger.setLevel(logging.ERROR)
 
-    # ... seed everything (NOTE: By setting `workers=True`, we ensure that the dataloaders are seeded as well)
-    # (`PL_GLOBAL_SEED` environment varaible will be passed to the spawned subprocessed; e.g., through `ddp_spawn` backend)
     if cfg.get("seed"):
         ranked_logger.info(f"Seeding everything with seed={cfg.seed}...")
         seed_everything(cfg.seed, workers=True, verbose=True)
@@ -256,10 +441,6 @@ def train(cfg: DictConfig) -> None:
 
     ranked_logger.info("Instantiating callbacks...")
     callbacks: list[BaseCallback] = instantiate_callbacks(cfg.get("callbacks"))
-
-    # ==============================================================================
-    # Trainer and model instantiation
-    # ==============================================================================
 
     ranked_logger.info("Instantiating trainer...")
     trainer = hydra.utils.instantiate(
@@ -280,14 +461,10 @@ def train(cfg: DictConfig) -> None:
     trainer.construct_model()
 
     _apply_lora_if_enabled(cfg, trainer)
+    _apply_nmf_if_enabled(cfg, trainer)
 
-    # ... construct the optimizer and schedule (which requires the model to be constructed)
     trainer.construct_optimizer()
     trainer.construct_scheduler()
-
-    # ==============================================================================
-    # Dataset instantiation
-    # ==============================================================================
 
     n_examples_per_epoch = cfg.trainer.n_examples_per_epoch
 
@@ -344,10 +521,110 @@ def train(cfg: DictConfig) -> None:
 
     ranked_logger.info("Training model...")
 
-    with suppress_warnings():
-        trainer.fit(
-            train_loader=train_loader, val_loaders=val_loaders, ckpt_config=ckpt_config
-        )
+    final_status = "unknown"
+    summary_payload: dict[str, Any] = {
+        "metrics": {},
+        "nmf": {},
+        "lora": {},
+        "status": "unknown",
+    }
+
+    def _to_float(v):
+        if v is None:
+            return None
+        try:
+            return float(v.item() if hasattr(v, "item") else v)
+        except Exception:
+            return None
+
+    def _collect_metrics() -> dict[str, Any]:
+        sources = []
+        if hasattr(trainer, "state"):
+            sources.append(trainer.state.get("metrics", None))
+        sources.append(getattr(trainer, "callback_metrics", None))
+        model = _unwrap_model(trainer.state["model"])
+        sources.append(getattr(model, "callback_metrics", None))
+        metrics: dict[str, Any] = {}
+        for source in sources:
+            if not source:
+                continue
+            try:
+                if hasattr(source, "items"):
+                    for k, v in source.items():
+                        metrics[str(k)] = _to_float(v)
+            except Exception:
+                continue
+        return metrics
+
+    try:
+        with suppress_warnings():
+            trainer.fit(
+                train_loader=train_loader, val_loaders=val_loaders, ckpt_config=ckpt_config
+            )
+        final_status = "success"
+    except Exception:
+        final_status = "error"
+        raise
+    finally:
+        current_epoch = trainer.state.get("current_epoch", None)
+        metrics = _collect_metrics()
+        metrics_csv, csv_rows = _scan_metrics_csv(Path(cfg.paths.log_dir))
+        if metrics_csv is not None:
+            summary_payload["metrics_csv"] = str(metrics_csv)
+            csv_best_lddt = _last_float(csv_rows, "val/mean_lddt", "train/per_epoch_mean_lddt_protein")
+            csv_best_loss = _last_float(csv_rows, "val/total_loss", "train/per_epoch_total_loss")
+            csv_best_epoch, csv_best_epoch_loss, csv_best_epoch_lddt = _best_epoch_from_rows(csv_rows)
+            final_row = csv_rows[-1] if csv_rows else {}
+            csv_final_epoch = None
+            try:
+                csv_final_epoch = int(float(final_row.get("epoch", final_row.get("step", current_epoch)))) if final_row else current_epoch
+            except Exception:
+                csv_final_epoch = current_epoch
+            csv_final_loss = _last_float([final_row], "val/total_loss", "train/per_epoch_total_loss") if final_row else None
+            csv_final_lddt = _last_float([final_row], "val/mean_lddt", "train/per_epoch_mean_lddt_protein") if final_row else None
+            if csv_best_lddt is not None:
+                metrics["val/mean_lddt"] = csv_best_lddt
+            if csv_best_loss is not None:
+                metrics["val/total_loss"] = csv_best_loss
+            summary_payload["best_epoch"] = csv_best_epoch
+            summary_payload["best_epoch_loss"] = csv_best_epoch_loss
+            summary_payload["best_epoch_lddt"] = csv_best_epoch_lddt
+            summary_payload["final_epoch"] = csv_final_epoch
+            summary_payload["final_epoch_loss"] = csv_final_loss
+            summary_payload["final_epoch_lddt"] = csv_final_lddt
+        summary_payload["metrics"] = metrics
+        summary_payload["best_val_lddt"] = metrics.get("val/mean_lddt") or metrics.get("train/per_epoch_mean_lddt_protein")
+        summary_payload["best_val_loss"] = metrics.get("val/total_loss") or metrics.get("train/per_epoch_total_loss")
+        summary_payload["final_val_lddt"] = summary_payload["best_val_lddt"]
+        summary_payload["final_val_loss"] = summary_payload["best_val_loss"]
+        summary_payload.setdefault("best_epoch", current_epoch)
+        summary_payload.setdefault("best_epoch_loss", summary_payload["best_val_loss"])
+        summary_payload.setdefault("best_epoch_lddt", summary_payload["best_val_lddt"])
+        summary_payload.setdefault("final_epoch", current_epoch)
+        summary_payload.setdefault("final_epoch_loss", summary_payload["final_val_loss"])
+        summary_payload.setdefault("final_epoch_lddt", summary_payload["final_val_lddt"])
+        if cfg.get("nmf", None) and cfg.nmf.enabled:
+            summary_payload["nmf"] = {
+                "enabled": True,
+                "target_keywords": list(cfg.nmf.target_keywords),
+                "rank": int(cfg.nmf.rank),
+                "alpha": float(cfg.nmf.alpha),
+                "eps": float(cfg.nmf.eps),
+            }
+        if cfg.get("lora", None) and cfg.lora.enabled:
+            summary_payload["lora"] = {
+                "enabled": True,
+                "target_keywords": list(cfg.lora.target_keywords),
+                "rank": int(cfg.lora.rank),
+                "alpha": float(cfg.lora.alpha),
+                "dropout": float(cfg.lora.dropout),
+            }
+        summary_payload["status"] = final_status
+        try:
+            summary_path = _write_run_summary(cfg, trainer, summary_payload)
+            ranked_logger.info(f"Wrote run summary JSON to {summary_path}")
+        except Exception as summary_exc:
+            ranked_logger.warning(f"Failed to write run summary JSON: {summary_exc}")
 
 
 if __name__ == "__main__":

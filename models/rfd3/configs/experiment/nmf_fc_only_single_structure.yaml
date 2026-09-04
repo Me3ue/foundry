@@ -1,0 +1,24 @@
+# @package _global_
+# A stricter, safer NMF variant that only replaces feed-forward projections.
+# Use this if you want the most conservative replacement setup before adding attention-side projections.
+
+defaults:
+  - single_structure
+  - _self_
+
+name: nmf-fc-only-single-structure
+
+nmf:
+  enabled: true
+  mode: replacement
+  rank: 8
+  alpha: 1.0
+  eps: 1.0e-6
+  nonnegative_param: softplus
+  target_keywords:
+    - fc1
+    - fc2
+
+ckpt_config:
+  path: /media/zzj/Data/rfd3_latest.ckpt
+  reset_optimizer: true

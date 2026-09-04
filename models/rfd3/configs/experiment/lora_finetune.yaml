@@ -80,7 +80,7 @@ datasets:
 # `prevalidate: True` generates structures from the random initial weights so you can see
 # how bad the model is at step 0, then watch it improve at each later validation round.
 trainer:
-  prevalidate: True
+  prevalidate: False
   n_examples_per_epoch: 20         # tiny "epoch" so validation happens frequently
   validate_every_n_epochs: 5        # validate (= generate structures) every epoch
   checkpoint_every_n_epochs: 10      # checkpoints are large; the live signal is validation, not ckpts

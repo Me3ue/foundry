@@ -1,0 +1,27 @@
+# @package _global_
+# Replacement NMF fine-tuning on the single-structure dataset.
+#
+# Why this target:
+# - `to_g` is a gating / fusion-style projection.
+# - These layers often behave more like channel mixers than geometric similarity engines.
+# - That makes them a plausible target for strict non-negative low-rank replacement.
+
+defaults:
+  - single_structure
+  - _self_
+
+name: nmf-to-g-only-single-structure
+
+nmf:
+  enabled: true
+  mode: replacement
+  rank: 8
+  alpha: 1.0
+  eps: 1.0e-6
+  nonnegative_param: softplus
+  target_keywords:
+    - to_g
+
+ckpt_config:
+  path: /media/zzj/Data/rfd3_latest.ckpt
+  reset_optimizer: true

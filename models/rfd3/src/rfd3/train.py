@@ -11,6 +11,49 @@ from omegaconf import DictConfig
 from foundry.utils.logging import suppress_warnings
 from foundry.utils.weights import CheckpointConfig
 
+
+def _unwrap_model(model):
+    if hasattr(model, "module"):
+        return model.module
+    if hasattr(model, "model"):
+        return model.model
+    return model
+
+
+def _apply_nmf_if_enabled(cfg: DictConfig, trainer) -> None:
+    if not (cfg.get("nmf", None) and cfg.nmf.enabled):
+        return
+
+    try:
+        from rfd3.nmf import inject_nmf_into_model, count_trainable_parameters
+    except ModuleNotFoundError:
+        from nmf import inject_nmf_into_model, count_trainable_parameters
+
+    model = trainer.state["model"]
+    base_model = _unwrap_model(model)
+    ranked_logger = logging.getLogger(__name__)
+    ranked_logger.info(f"Applying replacement NMF to base model type: {type(base_model).__name__}")
+
+    nmf_root_model = inject_nmf_into_model(
+        base_model,
+        target_keywords=cfg.nmf.target_keywords,
+        rank=cfg.nmf.rank,
+        nmf_alpha=cfg.nmf.alpha,
+        nmf_eps=cfg.nmf.eps,
+        freeze_all=True,
+    )
+
+    if hasattr(model, "model"):
+        model.model = nmf_root_model
+        trainer.state["model"] = model
+    else:
+        trainer.state["model"] = nmf_root_model
+
+    trainable, total = count_trainable_parameters(_unwrap_model(trainer.state["model"]))
+    ranked_logger.info(
+        f"NMF enabled: trainable params={trainable:,} / total params={total:,} ({100.0 * trainable / total:.4f}%)"
+    )
+
 # Setup root dir and environment variables (more info: https://github.com/ashleve/rootutils)
 # NOTE: Sets the `PROJECT_ROOT` environment variable to the root directory of the project (where `.project-root` is located)
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
