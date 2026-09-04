@@ -1,0 +1,62 @@
+# @package _global_
+# Shared PDB training setup for ZKP-oriented replacement NMF.
+#
+# Launch example:
+#   python models/rfd3/src/rfd3/train_lora.py experiment=nmf_zkp_encoder_pdb \
+#     paths.data.pdb_data_dir=/media/zzj/Data/pdb_metadata_latest \
+#     paths.data.pdb_parquet_dir=/media/zzj/Data/pdb_metadata_latest \
+#     paths.log_dir=$PWD/logs/train_nmf_zkp_pdb
+#
+# Verify the resolved config before a long run:
+#   python models/rfd3/src/rfd3/train_lora.py experiment=nmf_zkp_encoder_pdb --cfg job | less
+
+defaults:
+  - /datasets/train/pdb/rfd3_train_interface@datasets.train
+  - _self_
+
+name: nmf-zkp-pdb
+
+ckpt_config:
+  path: /media/zzj/Data/pdb_metadata_latest/rfd3_latest.ckpt
+  reset_optimizer: true
+
+datasets:
+  diffusion_batch_size_train: 2
+  crop_size: 384
+  max_atoms_in_crop: 512
+  train:
+    pdb:
+      probability: 1.0
+      dataset:
+        transform:
+          crop_contiguous_probability: 0.0
+          crop_spatial_probability: 1.0
+          filters:
+            - 'pdb_id not in ["7rte", "7m5w", "7n5u"]'
+            - 'pdb_id not in ["3di3", "5o45", "1z92", "2gy5", "4zxb"]'
+            - "deposition_date < '2021-01-01'"
+            - "resolution < 2.5"
+            - "num_polymer_pn_units <= 20"
+            - "cluster.notnull()"
+            - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+            - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
+            - "is_inter_molecule"
+    monomer_distillation: null
+  val:
+    unconditional:
+      dataset:
+        data: null
+    unconditional_deep:
+      dataset:
+        data: null
+    indexed:
+      dataset:
+        data: null
+
+trainer:
+  prevalidate: False
+  n_examples_per_epoch: 20
+  validate_every_n_epochs: 5
+  checkpoint_every_n_epochs: 10
+  grad_accum_steps: 1
+  max_epochs: 5

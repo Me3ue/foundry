@@ -1,0 +1,32 @@
+# @package _global_
+# ZKP-oriented NMF: third-priority proof targets.
+#
+# These layers sit just before the outputs. They are useful for proving that
+# the final coordinates / sequence logits came from a controlled low-rank core,
+# but they are weaker evidence of *input* integrity than the encoder group.
+#
+# Included:
+#   - to_r_update
+#   - sequence_head
+
+defaults:
+  - single_structure
+  - _self_
+
+name: nmf-zkp-head-single-structure
+
+nmf:
+  enabled: true
+  mode: replacement
+  rank: 8
+  alpha: 1.0
+  eps: 1.0e-6
+  nonnegative_param: softplus
+  apply_to_token_initializer: false
+  target_keywords:
+    - to_r_update
+    - sequence_head
+
+ckpt_config:
+  path: /media/zzj/Data/rfd3_latest.ckpt
+  reset_optimizer: true

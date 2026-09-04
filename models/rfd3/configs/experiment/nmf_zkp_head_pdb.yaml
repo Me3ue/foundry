@@ -1,0 +1,20 @@
+# @package _global_
+# ZKP-oriented NMF on PDB: third-priority proof targets (output consistency).
+
+defaults:
+  - nmf_zkp_pdb
+  - _self_
+
+name: nmf-zkp-head-pdb
+
+nmf:
+  enabled: true
+  mode: replacement
+  rank: 8
+  alpha: 1.0
+  eps: 1.0e-6
+  nonnegative_param: softplus
+  apply_to_token_initializer: false
+  target_keywords:
+    - to_r_update
+    - sequence_head

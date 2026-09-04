@@ -132,14 +132,27 @@ def _apply_nmf_if_enabled(cfg: DictConfig, trainer) -> None:
             f"Expected the base model to expose `diffusion_module`, but got {type(nmf_root_model).__name__}."
         )
 
-    nmf_root_model.diffusion_module, nmf_records = inject_nmf_into_model(
-        nmf_root_model.diffusion_module,
+    apply_to_token_initializer = bool(cfg.nmf.get("apply_to_token_initializer", False))
+    for p in nmf_root_model.parameters():
+        p.requires_grad = False
+    inject_kwargs = dict(
         target_keywords=cfg.nmf.target_keywords,
         rank=cfg.nmf.rank,
         nmf_alpha=cfg.nmf.alpha,
         nmf_eps=cfg.nmf.eps,
-        freeze_all=True,
+        freeze_all=False,
     )
+    if apply_to_token_initializer:
+        if not hasattr(nmf_root_model, "token_initializer"):
+            raise AttributeError(
+                f"Expected the base model to expose `token_initializer`, but got {type(nmf_root_model).__name__}."
+            )
+        nmf_root_model, nmf_records = inject_nmf_into_model(nmf_root_model, **inject_kwargs)
+    else:
+        nmf_root_model.diffusion_module, nmf_records = inject_nmf_into_model(
+            nmf_root_model.diffusion_module,
+            **inject_kwargs,
+        )
 
     if hasattr(model, "model"):
         model.model = nmf_root_model
@@ -166,6 +179,7 @@ def _apply_nmf_if_enabled(cfg: DictConfig, trainer) -> None:
 
     nmf_dump = {
         "enabled": True,
+        "apply_to_token_initializer": apply_to_token_initializer,
         "target_keywords": list(cfg.nmf.target_keywords),
         "rank": int(cfg.nmf.rank),
         "alpha": float(cfg.nmf.alpha),
@@ -606,6 +620,7 @@ def train(cfg: DictConfig) -> None:
         if cfg.get("nmf", None) and cfg.nmf.enabled:
             summary_payload["nmf"] = {
                 "enabled": True,
+                "apply_to_token_initializer": bool(cfg.nmf.get("apply_to_token_initializer", False)),
                 "target_keywords": list(cfg.nmf.target_keywords),
                 "rank": int(cfg.nmf.rank),
                 "alpha": float(cfg.nmf.alpha),

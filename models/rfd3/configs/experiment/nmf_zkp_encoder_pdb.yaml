@@ -1,0 +1,26 @@
+# @package _global_
+# ZKP-oriented NMF on PDB: first-priority proof targets (input integrity).
+#
+# Most of these live in TokenInitializer, so NMF is injected into the full model.
+
+defaults:
+  - nmf_zkp_pdb
+  - _self_
+
+name: nmf-zkp-encoder-pdb
+
+nmf:
+  enabled: true
+  mode: replacement
+  rank: 8
+  alpha: 1.0
+  eps: 1.0e-6
+  nonnegative_param: softplus
+  apply_to_token_initializer: true
+  target_keywords:
+    - transition_post_token
+    - transition_post_atom
+    - process_s_init
+    - process_z_init
+    - process_c
+    - process_s_trunk

@@ -1,0 +1,40 @@
+# @package _global_
+# ZKP-oriented NMF: second-priority proof targets.
+#
+# These layers move information between atom and token subspaces. The middle
+# square factor M is a good commitment point for intermediate-state integrity.
+#
+# Included:
+#   - process_pll
+#   - project_pll
+#   - upcast.project
+#   - downcast.project
+#   - process_n
+#
+# Note: default RFD3 uses cross-attention upcast/downcast, so `*.project` may
+# not match any module. The remaining keywords still provide valid replacements.
+
+defaults:
+  - single_structure
+  - _self_
+
+name: nmf-zkp-proj-single-structure
+
+nmf:
+  enabled: true
+  mode: replacement
+  rank: 8
+  alpha: 1.0
+  eps: 1.0e-6
+  nonnegative_param: softplus
+  apply_to_token_initializer: true
+  target_keywords:
+    - process_pll
+    - project_pll
+    - upcast.project
+    - downcast.project
+    - process_n
+
+ckpt_config:
+  path: /media/zzj/Data/rfd3_latest.ckpt
+  reset_optimizer: true

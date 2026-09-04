@@ -1,0 +1,38 @@
+# @package _global_
+# ZKP-oriented NMF on PDB: union of layers whose middle square M can serve as a
+# proof target. Explicitly excludes q/k/v, pair-bias internals, and process_r/a.
+
+defaults:
+  - nmf_zkp_pdb
+  - _self_
+
+name: nmf-zkp-all-pdb
+
+nmf:
+  enabled: true
+  mode: replacement
+  rank: 8
+  alpha: 1.0
+  eps: 1.0e-6
+  nonnegative_param: softplus
+  apply_to_token_initializer: true
+  target_keywords:
+    - transition_post_token
+    - transition_post_atom
+    - process_s_init
+    - process_z_init
+    - process_c
+    - process_s_trunk
+    - process_pll
+    - project_pll
+    - upcast.project
+    - downcast.project
+    - process_n
+    - process_single_l
+    - process_single_m
+    - process_z
+    - pair_mlp
+    - transition_1
+    - transition_2
+    - to_r_update
+    - sequence_head

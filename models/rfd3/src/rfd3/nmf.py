@@ -8,6 +8,13 @@ import torch
 import torch.nn as nn
 
 
+def _inverse_softplus(value: float) -> float:
+    if value <= 0.0:
+        return 0.0
+    # log(exp(x) - 1) is stable enough for the small positive scales used here.
+    return math.log(math.exp(value) - 1.0)
+
+
 @dataclass
 class NMFReplacementRecord:
     module_name: str
@@ -50,8 +57,9 @@ class ReplacementNMFLinear(nn.Module):
         self.out_features = int(weight.shape[0])
 
         # Non-negative factors are parameterized through softplus to keep them strictly >= 0.
-        # The factors approximate the base weight as W ~= U @ V.
+        # The factors approximate the base weight as W ~= U @ M @ V, with square core M.
         self.u_raw = nn.Parameter(torch.empty(self.out_features, rank))
+        self.m_raw = nn.Parameter(torch.empty(rank, rank))
         self.v_raw = nn.Parameter(torch.empty(rank, self.in_features))
 
         bias = getattr(base_layer, "bias", None)
@@ -67,22 +75,29 @@ class ReplacementNMFLinear(nn.Module):
             base_weight = base_weight.detach().abs() + self.nmf_eps
             # Seed the factorization with a simple non-negative split of the magnitude.
             # This is not exact NMF, but it gives a stable positive initialization.
+            # M starts near I so the initial map is close to the previous two-factor U @ V form.
             u_scale = math.sqrt(max(float(base_weight.mean().item()), self.nmf_eps))
             v_scale = u_scale
-            nn.init.constant_(self.u_raw, math.log(math.exp(u_scale) - 1.0) if u_scale > 0 else 0.0)
-            nn.init.constant_(self.v_raw, math.log(math.exp(v_scale) - 1.0) if v_scale > 0 else 0.0)
+            nn.init.constant_(self.u_raw, _inverse_softplus(u_scale) if u_scale > 0 else 0.0)
+            nn.init.constant_(self.v_raw, _inverse_softplus(v_scale) if v_scale > 0 else 0.0)
+            nn.init.constant_(self.m_raw, -10.0)
+            self.m_raw.data.fill_diagonal_(_inverse_softplus(1.0))
             return
         nn.init.normal_(self.u_raw, mean=0.0, std=0.02)
+        nn.init.normal_(self.m_raw, mean=0.0, std=0.02)
         nn.init.normal_(self.v_raw, mean=0.0, std=0.02)
 
     def _u(self) -> torch.Tensor:
         return torch.nn.functional.softplus(self.u_raw) + self.nmf_eps
 
+    def _m(self) -> torch.Tensor:
+        return torch.nn.functional.softplus(self.m_raw) + self.nmf_eps
+
     def _v(self) -> torch.Tensor:
         return torch.nn.functional.softplus(self.v_raw) + self.nmf_eps
 
     def effective_weight(self) -> torch.Tensor:
-        return self.nmf_alpha * (self._u() @ self._v())
+        return self.nmf_alpha * (self._u() @ self._m() @ self._v())
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         weight = self.effective_weight()
@@ -102,7 +117,7 @@ def _count_layer_params(base_layer: nn.Module, rank: int) -> tuple[int, int]:
         return 0, 0
     out_features, in_features = int(weight.shape[0]), int(weight.shape[1])
     base_params = out_features * in_features
-    nmf_params = out_features * rank + rank * in_features
+    nmf_params = out_features * rank + rank * rank + rank * in_features
     bias = getattr(base_layer, "bias", None)
     if bias is not None:
         base_params += int(bias.numel())
@@ -171,7 +186,7 @@ def inject_nmf_into_model(
     _replace(model)
 
     for name, p in model.named_parameters():
-        if any(token in name for token in ("u_raw", "v_raw")):
+        if any(token in name for token in ("u_raw", "m_raw", "v_raw")):
             p.requires_grad = True
 
     if replaced_count == 0:
