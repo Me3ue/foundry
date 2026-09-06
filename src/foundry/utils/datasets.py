@@ -280,11 +280,12 @@ def assemble_distributed_loader(
             shuffle=shuffle,
             drop_last=drop_last,
         )
-    elif isinstance(sampler, (RandomSampler, SequentialSampler)):
-        # (If given a RandomSampler or SequentialSampler, we must convert to a DistributedSampler)
+    elif isinstance(sampler, (RandomSampler, SequentialSampler, WeightedRandomSampler)):
+        # WeightedRandomSampler is used by leaf PDB datasets. Convert it to a
+        # DistributedSampler so single-GPU Fabric still has a valid rank/world_size.
         assert (
             rank is not None and world_size is not None
-        ), "Rank and world_size must be provided for RandomSampler or SequentialSampler"
+        ), "Rank and world_size must be provided for RandomSampler, SequentialSampler, or WeightedRandomSampler"
         sampler = DistributedSampler(
             dataset=dataset,
             num_replicas=world_size,
@@ -379,6 +380,14 @@ def assemble_val_loader_dict(
         dataset = hydra.utils.instantiate(
             val_dataset.dataset
         )  # directly instantiate the dataset
+
+        max_examples = val_dataset.get("max_examples") if hasattr(val_dataset, "get") else None
+        if max_examples:
+            n = min(int(max_examples), len(dataset))
+            ranked_logger.info(
+                f"Subsetting validation dataset {val_dataset_name} to first {n} examples"
+            )
+            dataset = Subset(dataset, list(range(n)))
 
         if "key_to_balance" in val_dataset and val_dataset.key_to_balance:
             # (If a key is provided to balance the dataset, we will use a LoadBalancedDistributedSampler)

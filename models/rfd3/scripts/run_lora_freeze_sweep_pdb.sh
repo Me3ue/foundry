@@ -12,7 +12,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO_ROOT"
 
 DATA="${DATA:-/media/zzj/Data/pdb_metadata_latest}"
-LOG_ROOT="${LOG_ROOT:-/home/zzj/protein/foundry/logs/train_pdb}"
+LOG_ROOT="${LOG_ROOT:-~/protein/foundry/logs/train_pdb}"
 CKPT="${CKPT:-/media/zzj/Data/pdb_metadata_latest/rfd3_latest.ckpt}"
 PYTHON="${PYTHON:-python}"
 SEED="${SEED:-42}"

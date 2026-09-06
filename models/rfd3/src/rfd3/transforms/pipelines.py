@@ -65,6 +65,7 @@ from atomworks.ml.transforms.filters import (
 )
 from atomworks.ml.utils.token import get_token_count
 from rfd3.transforms.conditioning_base import (
+    EnsureConditioningAnnotations,
     SampleConditioningFlags,
     SampleConditioningType,
     StrtoBoolforIsXFeatures,
@@ -124,6 +125,7 @@ def InferenceRoute(transform):
         condition_func=lambda data: data["is_inference"],
         transform_map={False: Identity(), True: transform},
     )
+
 
 
 def TrainingConditionRoute(condition, transform):
@@ -444,7 +446,12 @@ def build_atom14_base_pipeline_(
             else None,
             sharding_depth=1,
         ),
-        # ... Fuse inference and training conditioning assignments
+        # ... Fuse inference and training conditioning assignments.
+        # Validation datasets that load PDB structures directly skip the
+        # training conditioning sampler and the rfd3 input parser, so the
+        # required motif annotations may be absent; fill them with the
+        # fully-diffused defaults before UnindexFlaggedTokens checks for them.
+        InferenceRoute(EnsureConditioningAnnotations()),
         UnindexFlaggedTokens(central_atom=central_atom),
         # ... Virtual atom padding (NOTE: Last transform which modulates atom count)
         PadTokensWithVirtualAtoms(

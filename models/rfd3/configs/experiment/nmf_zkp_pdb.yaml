@@ -3,7 +3,7 @@
 #
 # Launch example:
 #   python models/rfd3/src/rfd3/train_lora.py experiment=nmf_zkp_encoder_pdb \
-#     paths.data.pdb_data_dir=/media/zzj/Data/pdb_metadata_latest \
+#     paths.data.pdb_data_dir=/media/zzj/Data/pdb_mirror \
 #     paths.data.pdb_parquet_dir=/media/zzj/Data/pdb_metadata_latest \
 #     paths.log_dir=$PWD/logs/train_nmf_zkp_pdb
 #
@@ -11,7 +11,6 @@
 #   python models/rfd3/src/rfd3/train_lora.py experiment=nmf_zkp_encoder_pdb --cfg job | less
 
 defaults:
-  - /datasets/train/pdb/rfd3_train_interface@datasets.train
   - _self_
 
 name: nmf-zkp-pdb
@@ -21,41 +20,147 @@ ckpt_config:
   reset_optimizer: true
 
 datasets:
-  diffusion_batch_size_train: 2
-  crop_size: 384
-  max_atoms_in_crop: 512
+  # RFD3 keeps DataLoader batch_size=1. GPU occupancy comes from the diffusion
+  # microbatch and crop atom count. 80GB can hold roughly pretrain-scale crops.
+  diffusion_batch_size_train: 8
+  crop_size: 256
+  max_atoms_in_crop: 2560
   train:
+    # Keep the MixedSampler tree from design_base (pdb.sub_datasets.interface + pn_unit).
+    # Do not attach a leaf `dataset` here: that would collapse sampling to
+    # WeightedRandomSampler and crash assemble_distributed_loader.
     pdb:
       probability: 1.0
+      sub_datasets:
+        interface:
+          dataset:
+            cif_parser_args:
+              cache_dir: null
+              load_from_cache: false
+              save_to_cache: false
+        pn_unit:
+          dataset:
+            cif_parser_args:
+              cache_dir: null
+              load_from_cache: false
+              save_to_cache: false
+    monomer_distillation: null
+  # PDB holdout (later deposition dates than the train filters). This is for
+  # reconstruction/denoising capability, not contig-JSON design generation.
+  val:
+    unconditional: null
+    unconditional_deep: null
+    indexed: null
+    pdb_holdout:
+      max_examples: 8
       dataset:
+        _target_: atomworks.ml.datasets.StructuralDatasetWrapper
+        save_failed_examples_to_dir: null
+        cif_parser_args:
+          cache_dir: null
+          load_from_cache: false
+          save_to_cache: false
+        dataset:
+          _target_: atomworks.ml.datasets.PandasDataset
+          id_column: example_id
+          name: pdb-holdout
+          data: ${paths.data.pdb_parquet_dir}/interfaces_df.parquet
+          filters:
+            - "deposition_date >= '2021-09-30'"
+            - "deposition_date < '2022-01-01'"
+            - "resolution < 2.5"
+            - "num_polymer_pn_units <= 4"
+            - "n_prot >= 1"
+            - "cluster.notnull()"
+            - "is_inter_molecule"
+          columns_to_load:
+            - example_id
+            - pdb_id
+            - assembly_id
+            - deposition_date
+            - resolution
+            - num_polymer_pn_units
+            - method
+            - cluster
+            - n_prot
+            - n_nuc
+            - n_ligand
+            - n_peptide
+            - pn_unit_1_iid
+            - pn_unit_2_iid
+            - pn_unit_1_non_polymer_res_names
+            - pn_unit_2_non_polymer_res_names
+            - is_inter_molecule
+            - all_pn_unit_iids_after_processing
+            - involves_loi
+        dataset_parser:
+          _target_: atomworks.ml.datasets.parsers.InterfacesDFParser
+          base_dir: ${paths.data.pdb_data_dir}
         transform:
+          _target_: ${datasets.pipeline_target}
+          is_inference: true
+          return_atom_array: true
+          diffusion_batch_size: 1
+          sigma_data: ${model.net.diffusion_module.sigma_data}
+          central_atom: ${datasets.global_transform_args.central_atom}
+          n_atoms_per_token: ${datasets.global_transform_args.n_atoms_per_token}
+          association_scheme: ${datasets.global_transform_args.association_scheme}
+          center_option: ${datasets.global_transform_args.center_option}
+          generate_conformers: ${datasets.global_transform_args.generate_conformers}
+          generate_conformers_for_non_protein_only: ${datasets.global_transform_args.generate_conformers_for_non_protein_only}
+          provide_reference_conformer_when_unmasked: ${datasets.global_transform_args.provide_reference_conformer_when_unmasked}
+          ground_truth_conformer_policy: ${datasets.global_transform_args.ground_truth_conformer_policy}
+          provide_elements_for_unindexed_components: ${datasets.global_transform_args.provide_elements_for_unindexed_components}
+          use_element_for_atom_names_of_atomized_tokens: ${datasets.global_transform_args.use_element_for_atom_names_of_atomized_tokens}
+          residue_cache_dir: ${paths.data.residue_cache_dir}
+          atom_1d_features: ${model.net.token_initializer.atom_1d_features}
+          token_1d_features: ${model.net.token_initializer.token_1d_features}
+          crop_size: ${datasets.crop_size}
+          max_atoms_in_crop: ${datasets.max_atoms_in_crop}
           crop_contiguous_probability: 0.0
           crop_spatial_probability: 1.0
-          filters:
-            - 'pdb_id not in ["7rte", "7m5w", "7n5u"]'
-            - 'pdb_id not in ["3di3", "5o45", "1z92", "2gy5", "4zxb"]'
-            - "deposition_date < '2021-01-01'"
-            - "resolution < 2.5"
-            - "num_polymer_pn_units <= 20"
-            - "cluster.notnull()"
-            - "~(pn_unit_1_non_polymer_res_names.notnull() and pn_unit_1_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
-            - "~(pn_unit_2_non_polymer_res_names.notnull() and pn_unit_2_non_polymer_res_names.str.contains('${resolve_import:atomworks.constants,AF3_EXCLUDED_LIGANDS_REGEX}', regex=True))"
-            - "is_inter_molecule"
-    monomer_distillation: null
-  val:
-    unconditional:
-      dataset:
-        data: null
-    unconditional_deep:
-      dataset:
-        data: null
-    indexed:
-      dataset:
-        data: null
+          allowed_types: ALL
+          dna_contact_crop_probability: 0.0
+          crop_center_cutoff_distance: 15.0
+          keep_full_binder_in_spatial_crop: false
+          max_binder_length: 170
+          b_factor_min: null
+          zero_occ_on_exposure_after_cropping: false
+          train_conditions: ${datasets.global_transform_args.train_conditions}
+          meta_conditioning_probabilities: ${datasets.global_transform_args.meta_conditioning_probabilities}
+          max_ppi_hotspots_frac_to_provide: ${datasets.global_transform_args.max_ppi_hotspots_frac_to_provide}
+          ppi_hotspot_max_distance: ${datasets.global_transform_args.ppi_hotspot_max_distance}
+          max_ss_frac_to_provide: ${datasets.global_transform_args.max_ss_frac_to_provide}
+          min_ss_island_len: ${datasets.global_transform_args.min_ss_island_len}
+          max_ss_island_len: ${datasets.global_transform_args.max_ss_island_len}
+          sigma_perturb: ${datasets.global_transform_args.sigma_perturb}
+          sigma_perturb_com: ${datasets.global_transform_args.sigma_perturb_com}
+  global_transform_args:
+    meta_conditioning_probabilities:
+      calculate_hbonds: 0.0
+
+callbacks:
+  dump_validation_structures_callback:
+    _target_: rfd3.trainer.dump_validation_structures.DumpValidationStructuresCallback
+    save_dir: ${paths.output_dir}/val_structures
+    dump_predictions: true
+    dump_prediction_metadata_json: true
+    dump_trajectories: true
+    dump_denoised_trajectories_only: false
+    one_model_per_file: true
+    dump_every_n: 5
+    align_trajectories: true
+    verbose: true
+  store_validation_metrics_in_df_callback:
+    _target_: foundry.callbacks.metrics_logging.StoreValidationMetricsInDFCallback
+    save_dir: ${paths.output_dir}/val_metrics
+    metrics_to_save: all
+  log_design_validation_metrics_callback:
+    _target_: rfd3.callbacks.LogDesignValidationMetricsCallback
 
 trainer:
-  prevalidate: False
-  n_examples_per_epoch: 20
+  prevalidate: true
+  n_examples_per_epoch: 64
   validate_every_n_epochs: 5
   checkpoint_every_n_epochs: 10
   grad_accum_steps: 1

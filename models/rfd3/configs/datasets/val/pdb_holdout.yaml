@@ -1,0 +1,86 @@
+# Tiny PDB holdout for NMF fine-tuning. Uses the same parquet as training, but
+# a later deposition-date window so it is not the training split.
+# Validation must use is_inference=True so the sampler dumps CIF + trajectories.
+
+dataset:
+  _target_: atomworks.ml.datasets.StructuralDatasetWrapper
+  save_failed_examples_to_dir: null
+  cif_parser_args:
+    cache_dir: null
+    load_from_cache: false
+    save_to_cache: false
+  dataset:
+    _target_: atomworks.ml.datasets.PandasDataset
+    id_column: example_id
+    name: pdb-holdout
+    data: ${paths.data.pdb_parquet_dir}/interfaces_df.parquet
+    filters:
+      - "deposition_date >= '2021-09-30'"
+      - "deposition_date < '2022-01-01'"
+      - "resolution < 2.5"
+      - "num_polymer_pn_units <= 4"
+      - "n_prot >= 1"
+      - "cluster.notnull()"
+      - "is_inter_molecule"
+    columns_to_load:
+      - example_id
+      - pdb_id
+      - assembly_id
+      - deposition_date
+      - resolution
+      - num_polymer_pn_units
+      - method
+      - cluster
+      - n_prot
+      - n_nuc
+      - n_ligand
+      - n_peptide
+      - pn_unit_1_iid
+      - pn_unit_2_iid
+      - pn_unit_1_non_polymer_res_names
+      - pn_unit_2_non_polymer_res_names
+      - is_inter_molecule
+      - all_pn_unit_iids_after_processing
+      - involves_loi
+  dataset_parser:
+    _target_: atomworks.ml.datasets.parsers.InterfacesDFParser
+    base_dir: ${paths.data.pdb_data_dir}
+  transform:
+    _target_: ${datasets.pipeline_target}
+    is_inference: true
+    return_atom_array: true
+    diffusion_batch_size: 1
+    sigma_data: ${model.net.diffusion_module.sigma_data}
+    central_atom: ${datasets.global_transform_args.central_atom}
+    n_atoms_per_token: ${datasets.global_transform_args.n_atoms_per_token}
+    association_scheme: ${datasets.global_transform_args.association_scheme}
+    center_option: ${datasets.global_transform_args.center_option}
+    generate_conformers: ${datasets.global_transform_args.generate_conformers}
+    generate_conformers_for_non_protein_only: ${datasets.global_transform_args.generate_conformers_for_non_protein_only}
+    provide_reference_conformer_when_unmasked: ${datasets.global_transform_args.provide_reference_conformer_when_unmasked}
+    ground_truth_conformer_policy: ${datasets.global_transform_args.ground_truth_conformer_policy}
+    provide_elements_for_unindexed_components: ${datasets.global_transform_args.provide_elements_for_unindexed_components}
+    use_element_for_atom_names_of_atomized_tokens: ${datasets.global_transform_args.use_element_for_atom_names_of_atomized_tokens}
+    residue_cache_dir: ${paths.data.residue_cache_dir}
+    atom_1d_features: ${model.net.token_initializer.atom_1d_features}
+    token_1d_features: ${model.net.token_initializer.token_1d_features}
+    crop_size: ${datasets.crop_size}
+    max_atoms_in_crop: ${datasets.max_atoms_in_crop}
+    crop_contiguous_probability: 0.0
+    crop_spatial_probability: 1.0
+    allowed_types: ALL
+    dna_contact_crop_probability: 0.0
+    crop_center_cutoff_distance: 15.0
+    keep_full_binder_in_spatial_crop: false
+    max_binder_length: 170
+    b_factor_min: null
+    zero_occ_on_exposure_after_cropping: false
+    train_conditions: ${datasets.global_transform_args.train_conditions}
+    meta_conditioning_probabilities: ${datasets.global_transform_args.meta_conditioning_probabilities}
+    max_ppi_hotspots_frac_to_provide: ${datasets.global_transform_args.max_ppi_hotspots_frac_to_provide}
+    ppi_hotspot_max_distance: ${datasets.global_transform_args.ppi_hotspot_max_distance}
+    max_ss_frac_to_provide: ${datasets.global_transform_args.max_ss_frac_to_provide}
+    min_ss_island_len: ${datasets.global_transform_args.min_ss_island_len}
+    max_ss_island_len: ${datasets.global_transform_args.max_ss_island_len}
+    sigma_perturb: ${datasets.global_transform_args.sigma_perturb}
+    sigma_perturb_com: ${datasets.global_transform_args.sigma_perturb_com}

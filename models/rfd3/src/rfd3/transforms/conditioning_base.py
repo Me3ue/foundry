@@ -185,6 +185,35 @@ def convert_existing_annotations_to_int(
     return atom_array
 
 
+class EnsureConditioningAnnotations(Transform):
+    """Ensure required motif-conditioning annotations exist on the atom array.
+
+    The training pipeline sets ``is_motif_atom_with_fixed_seq`` etc. via
+    ``SampleConditioningFlags`` (training-only), and the rfd3 inference input
+    parser sets them via ``set_default_conditioning_annotations``. Validation
+    datasets that load PDB structures directly (e.g. PandasDataset +
+    InterfacesDFParser with ``is_inference=true``) go through neither path, so
+    ``UnindexFlaggedTokens`` raises ``InvalidSampledConditionException`` on the
+    first validation batch.
+
+    This transform fills any *missing* required annotations with the
+    fully-diffused defaults (motif=False), mirroring the rfd3 inference
+    default. It is a no-op when the annotations are already present (training).
+    """
+
+    def check_input(self, *args, **kwargs):
+        pass
+
+    def forward(self, data):
+        atom_array = data["atom_array"]
+        existing = set(atom_array.get_annotation_categories())
+        missing = [a for a in REQUIRED_CONDITIONING_ANNOTATIONS if a not in existing]
+        if missing:
+            atom_array = set_default_conditioning_annotations(atom_array, motif=False)
+        data["atom_array"] = atom_array
+        return data
+
+
 class StrtoBoolforIsXFeatures(Transform):
     def check_input(self, *args, **kwargs):
         pass

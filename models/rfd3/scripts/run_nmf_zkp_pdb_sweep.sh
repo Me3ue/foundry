@@ -13,7 +13,7 @@
 # Usage:
 #   bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
 # Optional env:
-#   DATA=... PARQUET=... LOG_ROOT=... CKPT=... PYTHON=python SEED=42 MAX_EPOCHS=5
+#   DATA=... PARQUET=... PDB_MIRROR=... LOG_ROOT=... CKPT=... PYTHON=python SEED=42 MAX_EPOCHS=5
 
 set -uo pipefail
 
@@ -22,11 +22,17 @@ cd "$REPO_ROOT"
 
 DATA="${DATA:-/media/zzj/Data/pdb_metadata_latest}"
 PARQUET="${PARQUET:-${DATA}}"
-LOG_ROOT="${LOG_ROOT:-/home/zzj/protein/foundry/logs/train_nmf_zkp_pdb}"
+# CIF/PDB mirror is separate from metadata parquet. The metadata dir only has
+# interfaces_df.parquet / pn_units_df.parquet / rfd3_latest.ckpt.
+PDB_MIRROR="${PDB_MIRROR:-/media/zzj/Data/pdb_mirror}"
+# H-bond featurization (calculate_hbonds=0.2) shells out to HBPLUS. The binary
+# on this machine lives under /root, not the old /home/zzj path baked into env.
+export HBPLUS_PATH="${HBPLUS_PATH:-/root/protein/HBPLUS/hbplus/hbplus}"
+LOG_ROOT="${LOG_ROOT:-/root/protein/foundry/logs/train_nmf_zkp_pdb}"
 CKPT="${CKPT:-/media/zzj/Data/pdb_metadata_latest/rfd3_latest.ckpt}"
 PYTHON="${PYTHON:-python}"
 SEED="${SEED:-42}"
-MAX_EPOCHS="${MAX_EPOCHS:-5}"
+MAX_EPOCHS="${MAX_EPOCHS:-575}"
 INCLUDE_BASELINE="${INCLUDE_BASELINE:-1}"
 INCLUDE_ALL="${INCLUDE_ALL:-0}"
 SWEEP_STAMP="${SWEEP_STAMP:-$(date +%Y-%m-%d_%H-%M-%S)}"
@@ -36,12 +42,18 @@ CSV_OUT="${CSV_OUT:-${SWEEP_DIR}/comparison_table.csv}"
 mkdir -p "$SWEEP_DIR"
 
 COMMON_OVERRIDES=(
-  "paths.data.pdb_data_dir=${DATA}"
+  "paths.data.pdb_data_dir=${PDB_MIRROR}"
   "paths.data.pdb_parquet_dir=${PARQUET}"
   "paths.log_dir=${SWEEP_DIR}"
   "logger=csv"
   "seed=${SEED}"
   "trainer.max_epochs=${MAX_EPOCHS}"
+  "datasets.diffusion_batch_size_train=${DIFFUSION_BS:-4}"
+  "datasets.crop_size=${CROP_SIZE:-256}"
+  "datasets.max_atoms_in_crop=${MAX_ATOMS:-1920}"
+  "trainer.n_examples_per_epoch=${N_EXAMPLES:-48}"
+  "dataloader.train.dataloader_params.num_workers=${NUM_WORKERS:-8}"
+  "dataloader.train.dataloader_params.prefetch_factor=${PREFETCH:-4}"
 )
 
 JOBS=()
@@ -237,7 +249,12 @@ print(f"\nWrote: {table_out}")
 print(f"Wrote: {csv_out}")
 PY
 
+"${PYTHON}" models/rfd3/scripts/plot_nmf_zkp_pdb_metrics.py "${SWEEP_DIR}" --ckpt "${CKPT}" || true
+
 echo ""
 echo "Done. Comparison table:"
 echo "  ${TABLE_OUT}"
 echo "  ${CSV_OUT}"
+echo "Paper figures (if metrics.csv exists):"
+echo "  ${SWEEP_DIR}/figures/paper_training_curves.pdf"
+echo "  ${SWEEP_DIR}/paper_metrics.md"

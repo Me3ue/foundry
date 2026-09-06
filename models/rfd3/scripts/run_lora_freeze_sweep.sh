@@ -11,9 +11,9 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO_ROOT"
 
-DATA="${DATA:-/home/zzj/protein/foundry/single_structure_data}"
-LOG_ROOT="${LOG_ROOT:-/home/zzj/protein/foundry/logs/train}"
-CKPT="${CKPT:-/home/zzj/protein/foundry/models/rfd3/rfd3_latest.ckpt}"
+DATA="${DATA:-~/protein/foundry/single_structure_data}"
+LOG_ROOT="${LOG_ROOT:-~/protein/foundry/logs/train}"
+CKPT="${CKPT:-~/protein/foundry/models/rfd3/rfd3_latest.ckpt}"
 PYTHON="${PYTHON:-python}"
 SEED="${SEED:-42}"
 MAX_EPOCHS="${MAX_EPOCHS:-20}"
