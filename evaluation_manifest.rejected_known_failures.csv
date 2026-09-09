@@ -1,0 +1,2 @@
+example_id,pdb_id,assembly_id,deposition_date,resolution,num_polymer_pn_units,n_prot,cluster,is_inter_molecule,pn_unit_1_iid,pn_unit_2_iid
+"{['pdb', 'interfaces']}{9hq9}{1}{['A_1', 'B_1']}",9hq9,1,2024-12-16,1.6,1,1,2425956566c+A1H97,True,A_1,B_1

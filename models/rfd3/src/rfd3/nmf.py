@@ -55,6 +55,12 @@ class ReplacementNMFLinear(nn.Module):
         self.out_shape = getattr(base_layer, "out_shape", None)
         self.in_features = int(weight.shape[1])
         self.out_features = int(weight.shape[0])
+        # Factorize the magnitude and preserve the pretrained signed map.
+        self.register_buffer(
+            "weight_sign",
+            torch.where(weight.detach() < 0, -torch.ones_like(weight), torch.ones_like(weight)),
+            persistent=True,
+        )
 
         # Non-negative factors are parameterized through softplus to keep them strictly >= 0.
         # The factors approximate the base weight as W ~= U @ M @ V, with square core M.
@@ -72,14 +78,20 @@ class ReplacementNMFLinear(nn.Module):
 
     def reset_parameters(self, base_weight: torch.Tensor | None = None) -> None:
         if base_weight is not None:
-            base_weight = base_weight.detach().abs() + self.nmf_eps
-            # Seed the factorization with a simple non-negative split of the magnitude.
-            # This is not exact NMF, but it gives a stable positive initialization.
-            # M starts near I so the initial map is close to the previous two-factor U @ V form.
-            u_scale = math.sqrt(max(float(base_weight.mean().item()), self.nmf_eps))
-            v_scale = u_scale
-            nn.init.constant_(self.u_raw, _inverse_softplus(u_scale) if u_scale > 0 else 0.0)
-            nn.init.constant_(self.v_raw, _inverse_softplus(v_scale) if v_scale > 0 else 0.0)
+            target = base_weight.detach().abs().float().clamp_min(self.nmf_eps)
+            generator = torch.Generator(device=target.device)
+            generator.manual_seed(0)
+            u = torch.rand(self.out_features, self.rank, device=target.device, dtype=target.dtype, generator=generator).clamp_min(self.nmf_eps)
+            v = torch.rand(self.rank, self.in_features, device=target.device, dtype=target.dtype, generator=generator).clamp_min(self.nmf_eps)
+            scale = target.mean().sqrt()
+            u.mul_(scale); v.mul_(scale)
+            for _ in range(25):
+                v.mul_((u.transpose(0, 1) @ target) / (u.transpose(0, 1) @ u @ v).clamp_min(self.nmf_eps))
+                u.mul_((target @ v.transpose(0, 1)) / (u @ (v @ v.transpose(0, 1))).clamp_min(self.nmf_eps))
+                u.clamp_(min=self.nmf_eps); v.clamp_(min=self.nmf_eps)
+            inv = lambda x: torch.where(x > 20, x, torch.log(torch.expm1(x).clamp_min(self.nmf_eps)))
+            self.u_raw.data.copy_(inv(u).to(dtype=self.u_raw.dtype))
+            self.v_raw.data.copy_(inv(v).to(dtype=self.v_raw.dtype))
             nn.init.constant_(self.m_raw, -10.0)
             self.m_raw.data.fill_diagonal_(_inverse_softplus(1.0))
             return
@@ -97,7 +109,8 @@ class ReplacementNMFLinear(nn.Module):
         return torch.nn.functional.softplus(self.v_raw) + self.nmf_eps
 
     def effective_weight(self) -> torch.Tensor:
-        return self.nmf_alpha * (self._u() @ self._m() @ self._v())
+        magnitude = self._u() @ self._m() @ self._v()
+        return self.nmf_alpha * self.weight_sign * magnitude
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         weight = self.effective_weight()
@@ -109,6 +122,13 @@ class ReplacementNMFLinear(nn.Module):
 
 def _should_replace_linear(module_name: str, target_keywords: Iterable[str]) -> bool:
     return any(keyword in module_name for keyword in target_keywords)
+
+
+def _max_parameter_reducing_rank(out_features: int, in_features: int, requested_rank: int) -> int:
+    for candidate in range(min(requested_rank, out_features, in_features), 0, -1):
+        if candidate * (out_features + in_features + candidate) < out_features * in_features:
+            return candidate
+    return 0
 
 
 def _count_layer_params(base_layer: nn.Module, rank: int) -> tuple[int, int]:
@@ -152,13 +172,20 @@ def inject_nmf_into_model(
 
             if _should_replace_linear(full_name, target_keywords):
                 if _is_replaceable_linear(child):
-                    base_params, nmf_params = _count_layer_params(child, rank)
+                    weight = getattr(child, "weight", None)
+                    assert weight is not None
+                    layer_rank = _max_parameter_reducing_rank(
+                        int(weight.shape[0]), int(weight.shape[1]), rank
+                    )
+                    if layer_rank == 0:
+                        continue
+                    base_params, nmf_params = _count_layer_params(child, layer_rank)
                     setattr(
                         parent,
                         child_name,
                         ReplacementNMFLinear(
                             base_layer=child,
-                            rank=rank,
+                            rank=layer_rank,
                             nmf_alpha=nmf_alpha,
                             nmf_eps=nmf_eps,
                         ),
@@ -173,7 +200,7 @@ def inject_nmf_into_model(
                             module_type=child.__class__.__name__,
                             in_features=in_features,
                             out_features=out_features,
-                            rank=rank,
+                            rank=layer_rank,
                             base_params=base_params,
                             nmf_params=nmf_params,
                         )

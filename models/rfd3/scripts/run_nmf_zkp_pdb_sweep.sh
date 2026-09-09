@@ -41,6 +41,9 @@ TABLE_OUT="${TABLE_OUT:-${SWEEP_DIR}/comparison_table.md}"
 CSV_OUT="${CSV_OUT:-${SWEEP_DIR}/comparison_table.csv}"
 mkdir -p "$SWEEP_DIR"
 
+# 128 examples/epoch gives a less noisy estimate of the training distribution
+# while keeping the four-setting sweep tractable. Override with N_EXAMPLES for
+# a controlled ablation.
 COMMON_OVERRIDES=(
   "paths.data.pdb_data_dir=${PDB_MIRROR}"
   "paths.data.pdb_parquet_dir=${PARQUET}"
@@ -51,7 +54,7 @@ COMMON_OVERRIDES=(
   "datasets.diffusion_batch_size_train=${DIFFUSION_BS:-4}"
   "datasets.crop_size=${CROP_SIZE:-256}"
   "datasets.max_atoms_in_crop=${MAX_ATOMS:-1920}"
-  "trainer.n_examples_per_epoch=${N_EXAMPLES:-48}"
+  "trainer.n_examples_per_epoch=${N_EXAMPLES:-128}"
   "dataloader.train.dataloader_params.num_workers=${NUM_WORKERS:-8}"
   "dataloader.train.dataloader_params.prefetch_factor=${PREFETCH:-4}"
 )
@@ -93,6 +96,13 @@ run_one() {
   local rc=${PIPESTATUS[0]}
   set -e
 
+  # Require every configured job to produce a successful holdout evaluation.
+  # A zero exit code without val_metrics is not a valid paper-comparison run.
+  local validation_dir="${SWEEP_DIR}/train/${tag}"
+  if [[ "${rc}" == "0" ]] && ! find "${validation_dir}" -type f -path '*/val_metrics/validation_output_all_epochs.csv' -print -quit | grep -q .; then
+    echo "${tag}: missing validation_output_all_epochs.csv; marking job failed" >&2
+    rc=2
+  fi
   echo "${rc}" > "${SWEEP_DIR}/${tag}.exit_code"
   echo "[$(date '+%F %T')] END ${tag} exit=${rc}"
   return 0
@@ -178,8 +188,15 @@ headers = [
     "status",
     "best_val_lddt",
     "best_val_loss",
+    "final_train_loss",
+    "best_train_loss",
+    "final_train_lddt",
+    "best_train_lddt",
+    "final_seq_recovery",
+    "final_coordinate_mse",
     "trainable_params",
     "total_params",
+    "trainable_fraction",
     "proof_family",
     "replaced_layers",
 ]
@@ -216,10 +233,23 @@ for tag in tags:
     row = {
         "setting": tag,
         "status": status,
+        # These remain empty when the sweep intentionally has no validation
+        # loader. Never substitute training metrics into validation fields.
         "best_val_lddt": fmt(s.get("best_val_lddt")),
         "best_val_loss": fmt(s.get("best_val_loss")),
+        "final_train_loss": fmt(s.get("final_train_loss") or s.get("metrics", {}).get("train/per_epoch_total_loss")),
+        "best_train_loss": fmt(s.get("best_epoch_loss")),
+        "final_train_lddt": fmt(s.get("final_train_lddt") or s.get("metrics", {}).get("train/per_epoch_mean_lddt_protein")),
+        "best_train_lddt": fmt(s.get("best_epoch_lddt")),
+        "final_seq_recovery": fmt(s.get("final_train_seq_recovery") or s.get("metrics", {}).get("train/per_epoch_seq_recovery")),
+        "final_coordinate_mse": fmt(s.get("final_train_coordinate_mse") or s.get("metrics", {}).get("train/per_epoch_mse_loss_mean")),
         "trainable_params": s.get("trainable_params"),
         "total_params": s.get("total_params"),
+        "trainable_fraction": fmt(
+            (s.get("trainable_params") / s.get("total_params"))
+            if s.get("trainable_params") is not None and s.get("total_params")
+            else None
+        ),
         "proof_family": family.get(tag, ""),
         "replaced_layers": load_replacements(tag),
     }
@@ -235,6 +265,8 @@ md.extend(
         "- Encoder-group NMF is injected into the full model (`apply_to_token_initializer=true`).",
         "- Head-group NMF stays on `diffusion_module` only.",
         "- The middle square `M` of each replaced layer is the intended ZKP proof target.",
+        "- Validation metrics are intentionally blank for this training-only sweep; do not interpret training metrics as generalization metrics.",
+        "- Use summarize_nmf_zkp_pdb_evaluation.py on a fixed evaluation root to report per-example mean, SD, median, bootstrap 95% CI, paired baseline deltas, and coverage.",
         "",
     ]
 )

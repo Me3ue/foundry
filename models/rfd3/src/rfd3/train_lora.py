@@ -354,6 +354,10 @@ def _write_run_summary(cfg: DictConfig, trainer, extra: dict[str, Any]) -> Path:
         "best_val_loss": metrics.get("best_val_loss", extra.get("best_val_loss")),
         "final_val_lddt": metrics.get("final_val_lddt", extra.get("final_val_lddt")),
         "final_val_loss": metrics.get("final_val_loss", extra.get("final_val_loss")),
+        "final_train_loss": extra.get("final_train_loss"),
+        "final_train_lddt": extra.get("final_train_lddt"),
+        "final_train_seq_recovery": extra.get("final_train_seq_recovery"),
+        "final_train_coordinate_mse": extra.get("final_train_coordinate_mse"),
         "metrics": _safe_jsonable(metrics),
         "nmf": _safe_jsonable(extra.get("nmf", {})),
         "lora": _safe_jsonable(extra.get("lora", {})),
@@ -575,6 +579,23 @@ def train(cfg: DictConfig) -> None:
             trainer.fit(
                 train_loader=train_loader, val_loaders=val_loaders, ckpt_config=ckpt_config
             )
+        # Run one explicit final validation after fit. This is intentionally
+        # independent of the trainer's periodic should_validate predicate: the
+        # sweep must always produce comparable holdout metrics for every variant.
+        if val_loaders:
+            ranked_logger.info("Running explicit final validation on the completed model.")
+            trainer.validation_loop(
+                val_loaders=val_loaders,
+                limit_batches=trainer.limit_val_batches,
+            )
+        if val_loaders and not getattr(trainer, "validation_results_path", None):
+            raise RuntimeError(
+                "Validation was configured but produced no validation_results_path. "
+                "Refusing to report a training-only NMF run."
+            )
+        if getattr(trainer, "output_dir", None):
+            ranked_logger.info("Saving explicit final checkpoint after fit.")
+            trainer.save_checkpoint()
         final_status = "success"
     except Exception:
         final_status = "error"
@@ -583,10 +604,13 @@ def train(cfg: DictConfig) -> None:
         current_epoch = trainer.state.get("current_epoch", None)
         metrics = _collect_metrics()
         metrics_csv, csv_rows = _scan_metrics_csv(Path(cfg.paths.log_dir))
+        has_validation = val_loaders is not None
         if metrics_csv is not None:
             summary_payload["metrics_csv"] = str(metrics_csv)
-            csv_best_lddt = _last_float(csv_rows, "val/mean_lddt", "train/per_epoch_mean_lddt_protein")
-            csv_best_loss = _last_float(csv_rows, "val/total_loss", "train/per_epoch_total_loss")
+            metric_lddt_key = "val/mean_lddt" if has_validation else "train/per_epoch_mean_lddt_protein"
+            metric_loss_key = "val/total_loss" if has_validation else "train/per_epoch_total_loss"
+            csv_best_lddt = _last_float(csv_rows, metric_lddt_key)
+            csv_best_loss = _last_float(csv_rows, metric_loss_key)
             csv_best_epoch, csv_best_epoch_loss, csv_best_epoch_lddt = _best_epoch_from_rows(csv_rows)
             final_row = csv_rows[-1] if csv_rows else {}
             csv_final_epoch = None
@@ -596,10 +620,11 @@ def train(cfg: DictConfig) -> None:
                 csv_final_epoch = current_epoch
             csv_final_loss = _last_float([final_row], "val/total_loss", "train/per_epoch_total_loss") if final_row else None
             csv_final_lddt = _last_float([final_row], "val/mean_lddt", "train/per_epoch_mean_lddt_protein") if final_row else None
-            if csv_best_lddt is not None:
-                metrics["val/mean_lddt"] = csv_best_lddt
-            if csv_best_loss is not None:
-                metrics["val/total_loss"] = csv_best_loss
+            if has_validation:
+                if csv_best_lddt is not None:
+                    metrics["val/mean_lddt"] = csv_best_lddt
+                if csv_best_loss is not None:
+                    metrics["val/total_loss"] = csv_best_loss
             summary_payload["best_epoch"] = csv_best_epoch
             summary_payload["best_epoch_loss"] = csv_best_epoch_loss
             summary_payload["best_epoch_lddt"] = csv_best_epoch_lddt
@@ -607,10 +632,22 @@ def train(cfg: DictConfig) -> None:
             summary_payload["final_epoch_loss"] = csv_final_loss
             summary_payload["final_epoch_lddt"] = csv_final_lddt
         summary_payload["metrics"] = metrics
-        summary_payload["best_val_lddt"] = metrics.get("val/mean_lddt") or metrics.get("train/per_epoch_mean_lddt_protein")
-        summary_payload["best_val_loss"] = metrics.get("val/total_loss") or metrics.get("train/per_epoch_total_loss")
-        summary_payload["final_val_lddt"] = summary_payload["best_val_lddt"]
-        summary_payload["final_val_loss"] = summary_payload["best_val_loss"]
+        if has_validation:
+            summary_payload["best_val_lddt"] = metrics.get("val/mean_lddt")
+            summary_payload["best_val_loss"] = metrics.get("val/total_loss")
+            summary_payload["final_val_lddt"] = summary_payload["best_val_lddt"]
+            summary_payload["final_val_loss"] = summary_payload["best_val_loss"]
+        else:
+            summary_payload["best_val_lddt"] = None
+            summary_payload["best_val_loss"] = None
+            summary_payload["final_val_lddt"] = None
+            summary_payload["final_val_loss"] = None
+        # Training-only runs must never expose training metrics under val/*.
+        # This keeps downstream tables semantically correct.
+        summary_payload["final_train_lddt"] = metrics.get("train/per_epoch_mean_lddt_protein")
+        summary_payload["final_train_loss"] = metrics.get("train/per_epoch_total_loss")
+        summary_payload["final_train_seq_recovery"] = metrics.get("train/per_epoch_seq_recovery")
+        summary_payload["final_train_coordinate_mse"] = metrics.get("train/per_epoch_mse_loss_mean")
         summary_payload.setdefault("best_epoch", current_epoch)
         summary_payload.setdefault("best_epoch_loss", summary_payload["best_val_loss"])
         summary_payload.setdefault("best_epoch_lddt", summary_payload["best_val_lddt"])
