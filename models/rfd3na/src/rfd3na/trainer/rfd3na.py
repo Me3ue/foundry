@@ -31,6 +31,32 @@ from foundry.utils.torch import assert_no_nans, assert_same_shape
 global_logger = RankedLogger(__name__, rank_zero_only=False)
 
 
+def _is_cuda_oom(exc: BaseException) -> bool:
+    if isinstance(exc, torch.cuda.OutOfMemoryError):
+        return True
+    return isinstance(exc, RuntimeError) and "out of memory" in str(exc).lower()
+
+
+def _empty_cuda_cache() -> None:
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
+def _skipped_validation_result() -> dict:
+    return {
+        "skip": True,
+        "metrics_output": None,
+        "network_output": None,
+        "predicted_atom_array_stack": None,
+        "prediction_metadata": None,
+    }
+
+
+def _get_example_specification(example: dict) -> dict:
+    """Return optional input metadata in the shape expected by output code."""
+    return example.get("specification") or {}
+
+
 class AADesignTrainer(FabricTrainer):
     """Mostly for unique things like saving outputs and parsing inputs
 
@@ -119,8 +145,9 @@ class AADesignTrainer(FabricTrainer):
                 )
                 global_logger.warning(str(e))
             else:
-                # During validation, since we do not crop, there should be no NaN's in the coordinates to noise
-                # (They were either removed, as is done with fully unresolved chains, or resolved accoring to our pipeline's rules)
+                # Validation fills unresolved atoms on coord_to_be_noised, but a
+                # fully unresolved chain can still leave NaNs. validation_step
+                # skips those examples instead of aborting the holdout epoch.
                 raise e
 
         assert_no_nans(
@@ -208,25 +235,36 @@ class AADesignTrainer(FabricTrainer):
         assert not model.training, "Model must be in evaluation mode during validation!"
 
         example = batch[0] if not isinstance(batch, dict) else batch
+        example_id = example.get("example_id", "unknown")
 
-        network_input = self._assemble_network_inputs(example)
+        try:
+            network_input = self._assemble_network_inputs(example)
+            assert_no_nans(
+                network_input,
+                msg=f"network_input for example_id: {example_id}",
+            )
 
-        assert_no_nans(
-            network_input,
-            msg=f"network_input for example_id: {example['example_id']}",
-        )
-
-        # ... forward pass (with rollout)
-        # (Note that forward() passes to the EMA/shadow model if the model is not training)
-        network_output = model.forward(
-            input=network_input,
-            coord_atom_lvl_to_be_noised=example["coord_atom_lvl_to_be_noised"],
-        )
-
-        assert_no_nans(
-            network_output,
-            msg=f"network_output for example_id: {example['example_id']}",
-        )
+            # ... forward pass (with rollout)
+            # (Note that forward() passes to the EMA/shadow model if the model is not training)
+            network_output = model.forward(
+                input=network_input,
+                coord_atom_lvl_to_be_noised=example["coord_atom_lvl_to_be_noised"],
+            )
+            assert_no_nans(
+                network_output,
+                msg=f"network_output for example_id: {example_id}",
+            )
+        except AssertionError as e:
+            global_logger.warning(f"Skipping validation example {example_id}: {e}")
+            return _skipped_validation_result()
+        except Exception as e:
+            if not _is_cuda_oom(e):
+                raise
+            global_logger.warning(
+                f"Skipping validation example {example_id} after CUDA OOM: {e}"
+            )
+            _empty_cuda_cache()
+            return _skipped_validation_result()
 
         # ... Convert output to a stack of atom arrays
         predicted_atom_array_stack, prediction_metadata = (
@@ -359,6 +397,11 @@ class AADesignTrainer(FabricTrainer):
         )  # NB: Will be either list (when sequences are saved) or stack
 
         arrays = atom_array_stack
+        # PDB validation examples can bypass the inference input parser and
+        # therefore do not carry a ``specification`` key.  Output metadata is
+        # optional for these examples; treat a missing specification as the
+        # empty specification instead of aborting final validation.
+        specification = _get_example_specification(example)
         metadata_dict = {i: {"metrics": {}} for i in range(len(arrays))}
 
         # Add the seed to the metadata dictionary if provided
@@ -369,13 +412,13 @@ class AADesignTrainer(FabricTrainer):
         atom_array_stack = []
         for i, atom_array in enumerate(arrays):
             # ... Create essential outputs for metadata dictionary
-            if "example" in example["specification"]:
-                metadata_dict[i] |= {"task": example["specification"]["example"]}
+            if "example" in specification:
+                metadata_dict[i] |= {"task": specification["example"]}
 
             # ... Add original specification to metadata
             if self.output_full_json:
                 metadata_dict[i] |= {
-                    "specification": example["specification"],
+                    "specification": specification,
                 }
                 if (
                     hasattr(self, "inference_sampler_overrides")
@@ -411,20 +454,28 @@ class AADesignTrainer(FabricTrainer):
                 & ~residue_start_atoms.is_ligand
             ]
 
-            # If the src_component starts with an alphabetic character, it's from an external source
-            external_src_mask = np.array(
-                [
-                    (s[0].isalpha() if len(s) > 0 else False)
-                    for s in indexed_residue_starts_non_ligand.src_component
-                ]
-            )
-            indexed_residue_starts_from_external_src = (
-                indexed_residue_starts_non_ligand[external_src_mask]
-            )
+            # ``src_component`` is an inference-only annotation. PDB holdout
+            # examples are loaded directly and may not have it; the external
+            # source mapping is optional output metadata in that case.
+            if "src_component" in indexed_residue_starts_non_ligand.get_annotation_categories():
+                external_src_mask = np.array(
+                    [
+                        (s[0].isalpha() if len(s) > 0 else False)
+                        for s in indexed_residue_starts_non_ligand.src_component
+                    ]
+                )
+                indexed_residue_starts_from_external_src = (
+                    indexed_residue_starts_non_ligand[external_src_mask]
+                )
 
-            for token in indexed_residue_starts_from_external_src:
-                metadata_dict[i]["diffused_index_map"][token.src_component] = (
-                    f"{token.chain_id}{token.res_id}"
+                for token in indexed_residue_starts_from_external_src:
+                    metadata_dict[i]["diffused_index_map"][token.src_component] = (
+                        f"{token.chain_id}{token.res_id}"
+                    )
+            else:
+                global_logger.debug(
+                    "Skipping external source mapping for validation example "
+                    f"{example.get('example_id', 'unknown')}: missing src_component"
                 )
 
             # ... Delete virtual atoms and assign atom names and elements

@@ -20,3 +20,6 @@ hbond_metrics:
  _target_: rfd3.metrics.hbonds_hbplus_metrics.HbondMetrics
  cutoff_HA_dist: 3
  cutoff_DA_distance: 3.5
+
+lddt:
+  _target_: rfd3.metrics.lddt_metrics.LDDTMetrics

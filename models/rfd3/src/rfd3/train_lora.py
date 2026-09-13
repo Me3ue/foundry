@@ -3,10 +3,25 @@
 import json
 import logging
 import os
+import sys
+import time
 from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+
+# Prefer the in-repo packages over the conda site-packages copies. Hydra
+# instantiates rfd3/foundry after this file is imported, so this must happen
+# before any foundry/rfd3 import.
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+for _src in (
+    _REPO_ROOT / "src",
+    _REPO_ROOT / "models" / "rfd3" / "src",
+    _REPO_ROOT / "models" / "rfd3na" / "src",
+):
+    _src_str = str(_src)
+    if _src.exists() and _src_str not in sys.path:
+        sys.path.insert(0, _src_str)
 
 import hydra
 import rootutils
@@ -242,7 +257,37 @@ def _log_trainable_parameters(model, title: str = "Trainable parameter summary")
             print(name, param.shape)
 
 
-def _get_run_summary_path(cfg: DictConfig, trainer) -> Path:
+def _resource_snapshot() -> dict[str, Any]:
+    """Return process resource counters suitable for reproducibility reports."""
+    import resource
+
+    snapshot: dict[str, Any] = {
+        "cpu_max_rss_bytes": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024,
+    }
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            snapshot["gpu_count"] = torch.cuda.device_count()
+            snapshot["gpu_peak_allocated_bytes"] = max(
+                int(torch.cuda.max_memory_allocated(i)) for i in range(torch.cuda.device_count())
+            )
+            snapshot["gpu_peak_reserved_bytes"] = max(
+                int(torch.cuda.max_memory_reserved(i)) for i in range(torch.cuda.device_count())
+            )
+        else:
+            snapshot["gpu_count"] = 0
+    except Exception:
+        snapshot["gpu_count"] = None
+    return snapshot
+
+
+def _directory_size_bytes(path: Path | None) -> int | None:
+    if path is None or not path.exists():
+        return None
+    return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+
+
     log_dir = Path(cfg.paths.log_dir)
     run_name = str(getattr(cfg, "name", "run"))
     global_step = trainer.state.get("global_step", None)
@@ -540,6 +585,8 @@ def train(cfg: DictConfig) -> None:
     ranked_logger.info("Training model...")
 
     final_status = "unknown"
+    run_started = time.perf_counter()
+    resource_before = _resource_snapshot()
     summary_payload: dict[str, Any] = {
         "metrics": {},
         "nmf": {},
@@ -579,6 +626,11 @@ def train(cfg: DictConfig) -> None:
             trainer.fit(
                 train_loader=train_loader, val_loaders=val_loaders, ckpt_config=ckpt_config
             )
+        # Save before the explicit holdout pass. Validation can still OOM on a
+        # remaining oversized example; the trained weights must not be lost.
+        if getattr(trainer, "output_dir", None):
+            ranked_logger.info("Saving checkpoint after fit, before final validation.")
+            trainer.save_checkpoint()
         # Run one explicit final validation after fit. This is intentionally
         # independent of the trainer's periodic should_validate predicate: the
         # sweep must always produce comparable holdout metrics for every variant.
@@ -593,9 +645,6 @@ def train(cfg: DictConfig) -> None:
                 "Validation was configured but produced no validation_results_path. "
                 "Refusing to report a training-only NMF run."
             )
-        if getattr(trainer, "output_dir", None):
-            ranked_logger.info("Saving explicit final checkpoint after fit.")
-            trainer.save_checkpoint()
         final_status = "success"
     except Exception:
         final_status = "error"
@@ -672,6 +721,17 @@ def train(cfg: DictConfig) -> None:
                 "dropout": float(cfg.lora.dropout),
             }
         summary_payload["status"] = final_status
+        resource_after = _resource_snapshot()
+        summary_payload["cost"] = {
+            "wall_time_seconds": time.perf_counter() - run_started,
+            "resource_before": resource_before,
+            "resource_after": resource_after,
+            "cpu_max_rss_bytes": resource_after.get("cpu_max_rss_bytes"),
+            "gpu_count": resource_after.get("gpu_count"),
+            "gpu_peak_allocated_bytes": resource_after.get("gpu_peak_allocated_bytes"),
+            "gpu_peak_reserved_bytes": resource_after.get("gpu_peak_reserved_bytes"),
+            "output_dir_size_bytes": _directory_size_bytes(Path(getattr(trainer, "output_dir", cfg.paths.log_dir))),
+        }
         try:
             summary_path = _write_run_summary(cfg, trainer, summary_payload)
             ranked_logger.info(f"Wrote run summary JSON to {summary_path}")

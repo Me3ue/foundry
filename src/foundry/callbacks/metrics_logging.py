@@ -28,10 +28,15 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         """Saves per-GPU output dataframe of metrics to a rank-specific CSV."""
         self.save_dir.mkdir(parents=True, exist_ok=True)
         file_path = self.save_dir / f"validation_output_rank_{rank}_epoch_{epoch}.csv"
+        df = self.per_gpu_outputs_df
+        if df is None or df.empty:
+            # A rank that skipped every example still needs a headered CSV so
+            # rank-0 concatenation does not hit EmptyDataError.
+            df = pd.DataFrame(columns=["example_id", "dataset", "epoch"])
 
         # Flush explicitly to ensure the file is written to disk
         with open(file_path, "w") as f:
-            self.per_gpu_outputs_df.to_csv(f, index=False)
+            df.to_csv(f, index=False)
             f.flush()
             os.fsync(f.fileno())
 
@@ -52,6 +57,12 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
         dataset_name: str | None = None,
     ) -> None:
         """Build a flattened DataFrame from the metrics output and accumulate with the prior batches"""
+        if not outputs or outputs.get("skip") or outputs.get("metrics_output") is None:
+            ranked_logger.info(
+                f"Skipping metrics logging for {dataset_name} batch {batch_idx}: "
+                "example produced no validation metrics."
+            )
+            return
         assert "metrics_output" in outputs, "Validation outputs must contain metrics."
         metrics_output = deepcopy(outputs["metrics_output"])
 
@@ -197,6 +208,9 @@ class StoreValidationMetricsInDFCallback(BaseCallback):
 
             except pd.errors.EmptyDataError:
                 ranked_logger.warning(f"Skipping empty CSV: {f}")
+
+        if not final_dataframes:
+            return pd.DataFrame()
 
         # Concatenate dataframes, filling missing columns with NaN
         return pd.concat(final_dataframes, axis=0, ignore_index=True, sort=False)

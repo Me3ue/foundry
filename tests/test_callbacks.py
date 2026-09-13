@@ -104,5 +104,38 @@ def test_empty_rank_csv_is_skipped(tmp_path):
     assert merged["example_id"].tolist() == ["e1"]
 
 
+def test_all_ranks_empty_returns_empty_dataframe(tmp_path):
+    _write_rank_csv(tmp_path, rank=0, epoch=7, rows=[])
+    _write_rank_csv(tmp_path, rank=1, epoch=7, rows=[])
+
+    merged = _callback(tmp_path)._load_and_concatenate_csvs(epoch=7)
+
+    assert merged.empty
+
+
+def test_skipped_validation_batch_is_not_logged(tmp_path):
+    callback = _callback(tmp_path)
+    callback.on_validation_epoch_start(trainer=None)
+    callback.on_validation_batch_end(
+        trainer=None,
+        outputs={"skip": True, "metrics_output": None},
+        batch=None,
+        batch_idx=0,
+        num_batches=1,
+        dataset_name="pdb_holdout",
+    )
+    assert callback.per_gpu_outputs_df.empty
+
+
+def test_save_empty_rank_dataframe_writes_header(tmp_path):
+    callback = _callback(tmp_path)
+    callback.per_gpu_outputs_df = pd.DataFrame()
+    callback._save_dataframe_for_rank(rank=0, epoch=1)
+    path = tmp_path / "validation_output_rank_0_epoch_1.csv"
+    saved = pd.read_csv(path)
+    assert list(saved.columns) == ["example_id", "dataset", "epoch"]
+    assert saved.empty
+
+
 if __name__ == "__main__":
     pytest.main(["-v", __file__])

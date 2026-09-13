@@ -17,7 +17,18 @@ class LogDesignValidationMetricsCallback(BaseCallback):
         assert hasattr(
             trainer, "validation_results_path"
         ), "Results path not found! Ensure that StoreValidationMetricsInDFCallback is called first."
-        df = pd.read_csv(trainer.validation_results_path)
+        try:
+            df = pd.read_csv(trainer.validation_results_path)
+        except pd.errors.EmptyDataError:
+            ranked_logger.warning(
+                "Validation results CSV is empty; no holdout examples produced metrics this epoch."
+            )
+            return
+        if df.empty or "epoch" not in df.columns:
+            ranked_logger.warning(
+                "Validation results contain no scored examples this epoch."
+            )
+            return
 
         # ... filter to most recent epoch, drop epoch column
         df = df[df["epoch"] == df["epoch"].max()]

@@ -279,11 +279,17 @@ def get_crop_transform(
         ),
     ]
 
+    # Default inference/validation skips cropping so design jobs can score a
+    # full structure. PDB holdout evaluation sets max_atoms_in_crop; without
+    # cropping here the atom-pair tensor is L^2 and OOMs an 80GB GPU.
+    crop_route = (
+        cropping_transform
+        if max_atoms_in_crop is not None
+        else TrainingRoute(cropping_transform)
+    )
     transform = (
         pre_crop_transforms
-        + [
-            TrainingRoute(cropping_transform),
-        ]
+        + [crop_route]
         + post_crop_transforms
     )
     return transform
@@ -300,6 +306,23 @@ def get_diffusion_transforms(
         # Prepare coordinates for noising (without modifying the ground truth)
         # ...add placeholder coordinates for noising
         CopyAnnotation(annotation_to_copy="coord", new_annotation="coord_to_be_noised"),
+        # Training already filled unresolved atoms on ``coord`` after cropping
+        # (TrainingRoute above); copying that annotation is enough. Validation
+        # and inference skip that route, so fill only the noising copy here.
+        # Ground-truth ``coord`` stays occupancy-masked. Wrapped in
+        # InferenceRoute because atomworks forbids applying
+        # PlaceUnresolvedToken* more than once in the transform history.
+        InferenceRoute(
+            PlaceUnresolvedTokenAtomsOnRepresentativeAtom(
+                annotation_to_update="coord_to_be_noised"
+            )
+        ),
+        InferenceRoute(
+            PlaceUnresolvedTokenOnClosestResolvedTokenInSequence(
+                annotation_to_update="coord_to_be_noised",
+                annotation_to_copy="coord_to_be_noised",
+            )
+        ),
         # Feature aggregation
         AggregateFeaturesLikeAF3WithoutMSA(),
         # ...batching and noise sampling for diffusion

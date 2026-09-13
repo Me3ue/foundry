@@ -87,6 +87,9 @@ class DumpValidationStructuresCallback(BaseCallback):
     ):
         if (not self.dump_predictions) and (not self.dump_trajectories):
             return  # Nothing to do
+        if not outputs or outputs.get("skip") or outputs.get("network_output") is None:
+            ranked_logger.info("Skipping validation structure dump for a skipped example.")
+            return
         current_epoch = trainer.state["current_epoch"]
         if current_epoch % self.dump_every_n != 0:
             ranked_logger.debug(

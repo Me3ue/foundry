@@ -1,6 +1,6 @@
 # path to directory with training splits
-pdb_data_dir: /media/zzj/Data/pdb_metadata_latest
-pdb_parquet_dir: /home/zzj/protein/foundry/pdb_metadata_latest  # TODO: uncomment
+pdb_data_dir: /media/zzj/Data/
+pdb_parquet_dir: /media/zzj/Data/pdb_metadata_latest  # TODO: uncomment
 
 # monomer distillation dataset
 monomer_distillation_data_dir: /home/zzj/protein/foundry/single_structure_data

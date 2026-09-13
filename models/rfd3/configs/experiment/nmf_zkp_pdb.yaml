@@ -85,7 +85,7 @@ model:
     warmup_steps: 200
 
 trainer:
-  # Validation runs on the fixed temporal holdout every five epochs.
+  # Validation runs once on the fixed temporal holdout after fit completes.
   prevalidate: false
   n_examples_per_epoch: 64
   # Validation is produced explicitly after fit by train_lora.py. Periodic

@@ -32,6 +32,7 @@ def pytest_configure(config):
 
     paths_to_add = [
         root / "src",
+        root / "models" / "rfd3" / "src",
         root / "models" / "rfd3" / "tests",
     ]
 

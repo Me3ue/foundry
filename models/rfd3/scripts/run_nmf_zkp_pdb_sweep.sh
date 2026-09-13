@@ -19,6 +19,9 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$REPO_ROOT"
+# Training/preflight must import the in-repo rfd3/foundry sources, not the
+# stale copies installed into the conda env's site-packages.
+export PYTHONPATH="${REPO_ROOT}/src:${REPO_ROOT}/models/rfd3/src:${REPO_ROOT}/models/rfd3na/src${PYTHONPATH:+:${PYTHONPATH}}"
 
 DATA="${DATA:-/media/zzj/Data/pdb_metadata_latest}"
 PARQUET="${PARQUET:-${DATA}}"
@@ -30,9 +33,36 @@ PDB_MIRROR="${PDB_MIRROR:-/media/zzj/Data/pdb_mirror}"
 export HBPLUS_PATH="${HBPLUS_PATH:-/root/protein/HBPLUS/hbplus/hbplus}"
 LOG_ROOT="${LOG_ROOT:-/root/protein/foundry/logs/train_nmf_zkp_pdb}"
 CKPT="${CKPT:-/media/zzj/Data/pdb_metadata_latest/rfd3_latest.ckpt}"
-PYTHON="${PYTHON:-python}"
+# Prefer the project rc environment when PYTHON is not explicitly supplied.
+# The system/base Python may resolve to a different site-packages tree and can
+# silently hide a broken dependency installation.
+if [[ -z "${PYTHON+x}" ]]; then
+  if [[ -x "/opt/conda/envs/rc/bin/python" ]]; then
+    PYTHON="/opt/conda/envs/rc/bin/python"
+  else
+    PYTHON="python"
+  fi
+fi
+
+# Fail once, before launching every sweep job, if the runtime environment is
+# unusable.  In particular, pandas is imported by foundry's logging module.
+if ! "${PYTHON}" - <<'PY'
+import pandas
+import foundry
+import rfd3
+print(f"Using Python: {__import__('sys').executable}")
+print(f"Using pandas: {pandas.__file__}")
+print(f"Using foundry: {foundry.__file__}")
+print(f"Using rfd3: {rfd3.__file__}")
+PY
+then
+  echo "ERROR: Python environment failed the pandas/foundry/rfd3 import check." >&2
+  echo "Repair the environment or rerun with PYTHON=/path/to/python." >&2
+  exit 1
+fi
+
 SEED="${SEED:-42}"
-MAX_EPOCHS="${MAX_EPOCHS:-575}"
+MAX_EPOCHS="${MAX_EPOCHS:-580}"
 INCLUDE_BASELINE="${INCLUDE_BASELINE:-1}"
 INCLUDE_ALL="${INCLUDE_ALL:-0}"
 SWEEP_STAMP="${SWEEP_STAMP:-$(date +%Y-%m-%d_%H-%M-%S)}"
@@ -55,6 +85,9 @@ COMMON_OVERRIDES=(
   "datasets.crop_size=${CROP_SIZE:-256}"
   "datasets.max_atoms_in_crop=${MAX_ATOMS:-1920}"
   "trainer.n_examples_per_epoch=${N_EXAMPLES:-128}"
+  # Disable periodic validation; train_lora.py performs exactly one explicit
+  # validation after fit completes.
+  "trainer.validate_every_n_epochs=1000000000"
   "dataloader.train.dataloader_params.num_workers=${NUM_WORKERS:-8}"
   "dataloader.train.dataloader_params.prefetch_factor=${PREFETCH:-4}"
 )
@@ -108,9 +141,14 @@ run_one() {
   return 0
 }
 
+overall_failed=0
 for job in "${JOBS[@]}"; do
   IFS='|' read -r tag experiment extras <<<"${job}"
   run_one "${tag}" "${experiment}" "${extras}"
+  job_exit="$(cat "${SWEEP_DIR}/${tag}.exit_code")"
+  if [[ "${job_exit}" != "0" ]]; then
+    overall_failed=1
+  fi
 done
 
 "${PYTHON}" - <<'PY' "$SWEEP_DIR" "$TABLE_OUT" "$CSV_OUT" "$CKPT"
@@ -266,7 +304,8 @@ md.extend(
         "- Head-group NMF stays on `diffusion_module` only.",
         "- The middle square `M` of each replaced layer is the intended ZKP proof target.",
         "- Validation metrics are intentionally blank for this training-only sweep; do not interpret training metrics as generalization metrics.",
-        "- Use summarize_nmf_zkp_pdb_evaluation.py on a fixed evaluation root to report per-example mean, SD, median, bootstrap 95% CI, paired baseline deltas, and coverage.",
+        "- The final holdout validation runs once after training; periodic validation is disabled.",
+        "- The generated paper_summary.csv/.md report per-example lDDT mean, SD, median, bootstrap 95% CI, paired baseline deltas, and coverage.",
         "",
     ]
 )
@@ -281,6 +320,14 @@ print(f"\nWrote: {table_out}")
 print(f"Wrote: {csv_out}")
 PY
 
+# Build paper-level statistics from the per-example holdout CSVs. This is
+# intentionally run after all jobs, and never substitutes training metrics for
+# validation metrics.
+if ! "${PYTHON}" models/rfd3/scripts/summarize_nmf_zkp_pdb_sweep.py "${SWEEP_DIR}" --seed "${SEED}"; then
+  echo "Paper summary generation failed; validation CSVs may be missing lDDT." >&2
+  overall_failed=1
+fi
+
 "${PYTHON}" models/rfd3/scripts/plot_nmf_zkp_pdb_metrics.py "${SWEEP_DIR}" --ckpt "${CKPT}" || true
 
 echo ""
@@ -290,3 +337,16 @@ echo "  ${CSV_OUT}"
 echo "Paper figures (if metrics.csv exists):"
 echo "  ${SWEEP_DIR}/figures/paper_training_curves.pdf"
 echo "  ${SWEEP_DIR}/paper_metrics.md"
+echo "Paper full-metric evaluation:"
+echo "  ${SWEEP_DIR}/paper_summary/metric_summary.csv"
+echo "  ${SWEEP_DIR}/paper_summary/paired_baseline_deltas.csv"
+echo "  ${SWEEP_DIR}/paper_summary/evaluation_coverage.csv"
+
+echo "Training cost summary:"
+echo "  ${SWEEP_DIR}/paper_training_cost.csv"
+echo "  ${SWEEP_DIR}/paper_training_cost.md"
+
+if [[ "${overall_failed}" != "0" ]]; then
+  echo "Sweep finished with one or more failed jobs; see *.run.log and *.exit_code." >&2
+  exit 1
+fi
