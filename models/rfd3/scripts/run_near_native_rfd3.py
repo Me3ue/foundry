@@ -156,16 +156,20 @@ def native_hbond_selections(pdb_path: Path, hbplus: str) -> tuple[dict[str, str]
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-def make_spec(pdb_path: Path, anchor_stride: int, partial_t: float, hbplus: str | None,
+def make_spec(pdb_path: Path, anchor_stride: int | None, partial_t: float, sequence_mode: str,
+              hbplus: str | None,
               symmetry: str | None) -> tuple[dict, dict]:
     residues, available_atoms = inspect_rfd3_input(pdb_path)
-    anchors = residues[::anchor_stride]
-    if residues[-1] not in anchors:
+    anchors = residues[::anchor_stride] if anchor_stride is not None else []
+    if anchor_stride is not None and residues[-1] not in anchors:
         anchors.append(residues[-1])
     spec: dict = {
         "input": str(pdb_path), "partial_t": partial_t,
+        # No --anchor-stride means a no-fixed-coordinate ablation.
         "select_fixed_atoms": {residue: "BKBN" for residue in anchors},
-        "select_unfixed_sequence": False,
+        # This field selects residues *to unfix*: False fixes every input residue,
+        # while True allows all input residue identities to be predicted.
+        "select_unfixed_sequence": sequence_mode == "diffuse",
         "cif_parser_args": {"add_missing_atoms": False, "hydrogen_policy": "remove"},
         "extra": {"benchmark_type": "near_native_partial_diffusion", "input_sha256": sha256(pdb_path)},
     }
@@ -201,7 +205,10 @@ def main() -> None:
     parser.add_argument("--structures-dir", type=Path, default=Path("inputs/pdb"))
     parser.add_argument("--ids", nargs="+", default=DEFAULT_IDS)
     parser.add_argument("--partial-t", type=float, default=1.0, help="Noise in Å; <=2 Å is a near-native test.")
-    parser.add_argument("--anchor-stride", type=int, default=5, help="Fix N/CA/C/O every N residues.")
+    parser.add_argument("--anchor-stride", type=int, default=5,
+                        help="Fix N/CA/C/O every N residues; use 0 for no fixed-coordinate anchor ablation.")
+    parser.add_argument("--sequence-mode", choices=("fixed", "diffuse"), default="fixed",
+                        help="'fixed' preserves input residue identities; 'diffuse' lets RFD3 predict them.")
     parser.add_argument("--max-protein-residues", type=int, default=None,
                         help="Skip targets whose RFD3-parsed protein residue count exceeds this limit.")
     parser.add_argument("--hbplus", metavar="PATH", help="Enable native geometry-derived H-bond atom conditioning.")
@@ -220,8 +227,9 @@ def main() -> None:
                         help="Skip nvidia-smi check (only for advanced/custom runtimes).")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    if not 0 < args.partial_t <= 15 or args.anchor_stride < 1 or args.designs_per_target < 1 or args.timesteps < 2:
-        parser.error("partial-t must be in (0,15], anchor-stride/designs/timesteps must be positive (timesteps >=2)")
+    if not 0 < args.partial_t <= 15 or args.anchor_stride < 0 or args.designs_per_target < 1 or args.timesteps < 2:
+        parser.error("partial-t must be in (0,15], anchor-stride must be >=0, designs/timesteps must be positive (timesteps >=2)")
+    anchor_stride = args.anchor_stride or None
     if args.max_protein_residues is not None and args.max_protein_residues < 2:
         parser.error("--max-protein-residues must be at least 2")
 
@@ -257,7 +265,8 @@ def main() -> None:
             }
             print(f"Skipping {pdb_id}: {len(residues)} protein residues > limit {args.max_protein_residues}")
             continue
-        spec, target = make_spec(path, args.anchor_stride, args.partial_t, args.hbplus, symmetries.get(pdb_id))
+        spec, target = make_spec(path, anchor_stride, args.partial_t, args.sequence_mode,
+                                 args.hbplus, symmetries.get(pdb_id))
         specs[f"{pdb_id}_near_native"] = spec
         targets[pdb_id] = {"input": str(path), "sha256": sha256(path), **target}
     if not specs:
