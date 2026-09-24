@@ -120,7 +120,18 @@ class ReplacementNMFLinear(nn.Module):
         return out
 
 
-def _should_replace_linear(module_name: str, target_keywords: Iterable[str]) -> bool:
+def _should_replace_linear(
+    module_name: str,
+    target_keywords: Iterable[str],
+    match_mode: str = "substring",
+) -> bool:
+    if match_mode == "exact":
+        return any(
+            module_name == keyword or module_name.endswith("." + keyword)
+            for keyword in target_keywords
+        )
+    if match_mode != "substring":
+        raise ValueError(f"Unknown NMF match_mode={match_mode!r}; expected 'substring' or 'exact'.")
     return any(keyword in module_name for keyword in target_keywords)
 
 
@@ -157,6 +168,8 @@ def inject_nmf_into_model(
     nmf_alpha: float = 1.0,
     nmf_eps: float = 1e-6,
     freeze_all: bool = True,
+    match_mode: str = "substring",
+    max_replacements: int | None = None,
 ) -> tuple[nn.Module, list[NMFReplacementRecord]]:
     if freeze_all:
         for p in model.parameters():
@@ -168,9 +181,11 @@ def inject_nmf_into_model(
     def _replace(parent: nn.Module, prefix: str = ""):
         nonlocal replaced_count
         for child_name, child in list(parent.named_children()):
+            if max_replacements is not None and replaced_count >= max_replacements:
+                return
             full_name = f"{prefix}.{child_name}" if prefix else child_name
 
-            if _should_replace_linear(full_name, target_keywords):
+            if _should_replace_linear(full_name, target_keywords, match_mode=match_mode):
                 if _is_replaceable_linear(child):
                     weight = getattr(child, "weight", None)
                     assert weight is not None

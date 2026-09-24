@@ -1,8 +1,6 @@
 # @package _global_
-# ZKP-oriented NMF on PDB: second-priority proof targets (intermediate-state integrity).
-#
-# Note: default RFD3 uses cross-attention upcast/downcast, so `*.project` may
-# not match any module. The remaining keywords still provide valid replacements.
+# ZKP projection family, one linear at a time.
+# Default target is process_pll, a single Linear (not a container of several).
 
 defaults:
   - nmf_zkp_pdb
@@ -18,9 +16,7 @@ nmf:
   eps: 1.0e-6
   nonnegative_param: softplus
   apply_to_token_initializer: true
+  match_mode: exact
+  max_replacements: 1
   target_keywords:
-    - process_pll
-    - project_pll
-    - upcast.project
-    - downcast.project
-    - process_n
+    - token_initializer.process_pll

@@ -1,5 +1,6 @@
 # @package _global_
-# ZKP-oriented NMF on PDB: third-priority proof targets (output consistency).
+# ZKP head family, one linear at a time.
+# Default target is the unique Linear inside to_r_update.
 
 defaults:
   - nmf_zkp_pdb
@@ -14,7 +15,8 @@ nmf:
   alpha: 1.0
   eps: 1.0e-6
   nonnegative_param: softplus
-  apply_to_token_initializer: false
+  apply_to_token_initializer: true
+  match_mode: exact
+  max_replacements: 1
   target_keywords:
-    - to_r_update
-    - sequence_head
+    - diffusion_module.to_r_update.1

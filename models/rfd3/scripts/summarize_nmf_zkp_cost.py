@@ -8,7 +8,15 @@ from pathlib import Path
 
 import pandas as pd
 
-TAGS = ["baseline", "zkp_encoder", "zkp_proj", "zkp_head", "zkp_all"]
+def discover_tags(sweep_dir: Path) -> list[str]:
+    """Discover current single-layer jobs from summaries or training directories."""
+    tags = set()
+    for path in sweep_dir.glob("*.run_summary.json"):
+        tags.add(path.name.split(".run_summary.json", 1)[0])
+    train_root = sweep_dir / "train"
+    if train_root.exists():
+        tags.update(path.name for path in train_root.iterdir() if path.is_dir())
+    return sorted(tags, key=lambda tag: (tag != "baseline", tag))
 
 
 def main() -> None:
@@ -16,7 +24,7 @@ def main() -> None:
     ap.add_argument("sweep_dir", type=Path)
     args = ap.parse_args()
     rows = []
-    for tag in TAGS:
+    for tag in discover_tags(args.sweep_dir):
         summary_files = sorted(args.sweep_dir.glob(f"{tag}*.run_summary.json"))
         summary = {}
         if summary_files:

@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
-# One-click replacement-NMF sweep on ZKP-suitable layers, trained on PDB.
+# One-click replacement-NMF sweep: one linear layer per job, trained on PDB.
 #
-# Groups follow models/rfd3/docs/rfd3_structure_and_nmf_analysis.md:
-#   1) zkp_encoder  input-shaping / encoder interface  (best input-integrity M)
-#   2) zkp_proj     token/atom projection mixers       (intermediate-state M)
-#   3) zkp_head     output heads                       (output-consistency M)
+# Each job exact-matches a single 2D Linear and replaces only that layer
+# (nmf.match_mode=exact, nmf.max_replacements=1). Parent modules such as
+# Transition are never replaced as a group.
+#
+# LAYER_SET:
+#   encoder  input-shaping linears (default)
+#   proj     token/atom projection linears
+#   head     output-head linears
+#   all      union of the three families
+#   one      a single LAYER=module.path job
 #
 # Optional:
 #   INCLUDE_BASELINE=1  also run a no-NMF PDB baseline
-#   INCLUDE_ALL=1       also run the union of all ZKP-suitable layers
 #
 # Usage:
 #   bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
+#   LAYER_SET=one LAYER=token_initializer.process_pll bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
 # Optional env:
 #   DATA=... PARQUET=... PDB_MIRROR=... LOG_ROOT=... CKPT=... PYTHON=python SEED=42 MAX_EPOCHS=5
 
@@ -92,18 +98,79 @@ COMMON_OVERRIDES=(
   "dataloader.train.dataloader_params.prefetch_factor=${PREFETCH:-4}"
 )
 
+LAYER_SET="${LAYER_SET:-encoder}"
+LAYER="${LAYER:-}"
+
+layer_jobs_for() {
+  local family="$1"
+  case "${family}" in
+    encoder)
+      printf '%s\n' \
+        "process_s_init|token_initializer.process_s_init.1" \
+        "process_z_init|token_initializer.process_z_init.1" \
+        "process_c|diffusion_module.process_c.1" \
+        "process_s_trunk|token_initializer.process_s_trunk.1" \
+        "transition_post_token_l1|token_initializer.transition_post_token.linear_1" \
+        "transition_post_atom_l1|token_initializer.transition_post_atom.linear_1"
+      ;;
+    proj)
+      printf '%s\n' \
+        "process_pll|token_initializer.process_pll" \
+        "project_pll|token_initializer.project_pll" \
+        "process_n_atom|diffusion_module.process_n.0.1" \
+        "process_n_token|diffusion_module.process_n.1.1" \
+        "process_single_l|token_initializer.process_single_l.1" \
+        "process_z|token_initializer.process_z.1"
+      ;;
+    head)
+      printf '%s\n' \
+        "to_r_update|diffusion_module.to_r_update.1" \
+        "sequence_head|diffusion_module.sequence_head.linear"
+      ;;
+    *)
+      echo "Unknown LAYER_SET family: ${family}" >&2
+      return 1
+      ;;
+  esac
+}
+
 JOBS=()
 if [[ "${INCLUDE_BASELINE}" == "1" ]]; then
-  JOBS+=("baseline|nmf_zkp_pdb|name=baseline ckpt_config.path=${CKPT} ckpt_config.reset_optimizer=true")
+  JOBS+=("baseline|nmf_zkp_pdb|name=baseline +nmf.enabled=false ckpt_config.path=${CKPT} ckpt_config.reset_optimizer=true")
 fi
-JOBS+=(
-  "zkp_encoder|nmf_zkp_encoder_pdb|name=zkp_encoder"
-  "zkp_proj|nmf_zkp_proj_pdb|name=zkp_proj"
-  "zkp_head|nmf_zkp_head_pdb|name=zkp_head"
-)
-if [[ "${INCLUDE_ALL}" == "1" ]]; then
-  JOBS+=("zkp_all|nmf_zkp_all_pdb|name=zkp_all")
-fi
+
+append_layer_jobs() {
+  local family="$1"
+  local spec tag path
+  while IFS= read -r spec; do
+    [[ -z "${spec}" ]] && continue
+    IFS='|' read -r tag path <<<"${spec}"
+    JOBS+=("${tag}|nmf_zkp_single_layer_pdb|name=${tag} nmf.target_keywords=[${path}] nmf.match_mode=exact nmf.max_replacements=1 nmf.apply_to_token_initializer=true")
+  done < <(layer_jobs_for "${family}")
+}
+
+case "${LAYER_SET}" in
+  encoder) append_layer_jobs encoder ;;
+  proj) append_layer_jobs proj ;;
+  head) append_layer_jobs head ;;
+  all)
+    append_layer_jobs encoder
+    append_layer_jobs proj
+    append_layer_jobs head
+    ;;
+  one)
+    if [[ -z "${LAYER}" ]]; then
+      echo "LAYER_SET=one requires LAYER=<module.path>, e.g. LAYER=token_initializer.process_pll" >&2
+      exit 1
+    fi
+    tag="$(echo "${LAYER}" | tr './' '__')"
+    JOBS+=("${tag}|nmf_zkp_single_layer_pdb|name=${tag} nmf.target_keywords=[${LAYER}] nmf.match_mode=exact nmf.max_replacements=1 nmf.apply_to_token_initializer=true")
+    ;;
+  *)
+    echo "Unknown LAYER_SET=${LAYER_SET}. Use encoder, proj, head, all, or one." >&2
+    exit 1
+    ;;
+esac
 
 run_one() {
   local tag="$1"
@@ -162,7 +229,7 @@ table_out = Path(sys.argv[2])
 csv_out = Path(sys.argv[3])
 ckpt = sys.argv[4]
 
-preferred = ["baseline", "zkp_encoder", "zkp_proj", "zkp_head", "zkp_all"]
+preferred = ["baseline"]
 found = [p.name.replace(".exit_code", "") for p in sorted(sweep_dir.glob("*.exit_code"))]
 tags = [t for t in preferred if t in found] + [t for t in found if t not in preferred]
 
@@ -240,10 +307,20 @@ headers = [
 ]
 family = {
     "baseline": "none",
-    "zkp_encoder": "input-integrity M",
-    "zkp_proj": "intermediate-state M",
-    "zkp_head": "output-consistency M",
-    "zkp_all": "union of ZKP-suitable layers",
+    "process_s_init": "input-integrity M",
+    "process_z_init": "input-integrity M",
+    "process_c": "input-integrity M",
+    "process_s_trunk": "input-integrity M",
+    "transition_post_token_l1": "input-integrity M",
+    "transition_post_atom_l1": "input-integrity M",
+    "process_pll": "intermediate-state M",
+    "project_pll": "intermediate-state M",
+    "process_n_atom": "intermediate-state M",
+    "process_n_token": "intermediate-state M",
+    "process_single_l": "intermediate-state M",
+    "process_z": "intermediate-state M",
+    "to_r_update": "output-consistency M",
+    "sequence_head": "output-consistency M",
 }
 
 rows = []
@@ -255,9 +332,10 @@ md = [
     "",
     "## Layer groups",
     "",
-    "- `zkp_encoder`: `transition_post_token`, `transition_post_atom`, `process_s_init`, `process_z_init`, `process_c`, `process_s_trunk`",
-    "- `zkp_proj`: `process_pll`, `project_pll`, `upcast.project`, `downcast.project`, `process_n`",
-    "- `zkp_head`: `to_r_update`, `sequence_head`",
+    "- Each job replaces **exactly one** Linear via `match_mode=exact` and `max_replacements=1`.",
+    "- Encoder defaults: `process_s_init.1`, `process_z_init.1`, `process_c.1`, `process_s_trunk.1`, `transition_post_token.linear_1`, `transition_post_atom.linear_1`.",
+    "- Projection defaults: `process_pll`, `project_pll`, `process_n.{0,1}.1`, `process_single_l.1`, `process_z.1`.",
+    "- Head defaults: `to_r_update.1`, `sequence_head.linear`.",
     "- excluded: `to_q` / `to_k` / `to_v` / `to_b` / `to_g`, `process_r`, `process_a`",
     "",
     "| " + " | ".join(headers) + " |",
@@ -299,10 +377,9 @@ md.extend(
         "",
         "## Notes",
         "",
-        "- Training uses the PDB interface dataset (`rfd3_train_interface`), not `single_structure_data`.",
-        "- Encoder-group NMF is injected into the full model (`apply_to_token_initializer=true`).",
-        "- Head-group NMF stays on `diffusion_module` only.",
-        "- The middle square `M` of each replaced layer is the intended ZKP proof target.",
+        "- Training uses the PDB dataset, not `single_structure_data`.",
+        "- One Linear is replaced per job. Parent Transition / Sequential names are not expanded.",
+        "- The middle square `M` of that single layer is the intended ZKP proof target.",
         "- Validation metrics are intentionally blank for this training-only sweep; do not interpret training metrics as generalization metrics.",
         "- The final holdout validation runs once after training; periodic validation is disabled.",
         "- The generated paper_summary.csv/.md report per-example lDDT mean, SD, median, bootstrap 95% CI, paired baseline deltas, and coverage.",
@@ -338,9 +415,9 @@ echo "Paper figures (if metrics.csv exists):"
 echo "  ${SWEEP_DIR}/figures/paper_training_curves.pdf"
 echo "  ${SWEEP_DIR}/paper_metrics.md"
 echo "Paper full-metric evaluation:"
-echo "  ${SWEEP_DIR}/paper_summary/metric_summary.csv"
-echo "  ${SWEEP_DIR}/paper_summary/paired_baseline_deltas.csv"
-echo "  ${SWEEP_DIR}/paper_summary/evaluation_coverage.csv"
+echo "  ${SWEEP_DIR}/paper_summary.csv"
+echo "  ${SWEEP_DIR}/paper_paired_deltas.csv"
+echo "  ${SWEEP_DIR}/paper_per_example_lddt.csv"
 
 echo "Training cost summary:"
 echo "  ${SWEEP_DIR}/paper_training_cost.csv"

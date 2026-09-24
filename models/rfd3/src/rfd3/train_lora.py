@@ -150,12 +150,17 @@ def _apply_nmf_if_enabled(cfg: DictConfig, trainer) -> None:
     apply_to_token_initializer = bool(cfg.nmf.get("apply_to_token_initializer", False))
     for p in nmf_root_model.parameters():
         p.requires_grad = False
+    max_replacements = cfg.nmf.get("max_replacements", None)
+    if max_replacements is not None:
+        max_replacements = int(max_replacements)
     inject_kwargs = dict(
         target_keywords=cfg.nmf.target_keywords,
         rank=cfg.nmf.rank,
         nmf_alpha=cfg.nmf.alpha,
         nmf_eps=cfg.nmf.eps,
         freeze_all=False,
+        match_mode=str(cfg.nmf.get("match_mode", "substring")),
+        max_replacements=max_replacements,
     )
     if apply_to_token_initializer:
         if not hasattr(nmf_root_model, "token_initializer"):
@@ -195,6 +200,8 @@ def _apply_nmf_if_enabled(cfg: DictConfig, trainer) -> None:
     nmf_dump = {
         "enabled": True,
         "apply_to_token_initializer": apply_to_token_initializer,
+        "match_mode": str(cfg.nmf.get("match_mode", "substring")),
+        "max_replacements": max_replacements,
         "target_keywords": list(cfg.nmf.target_keywords),
         "rank": int(cfg.nmf.rank),
         "alpha": float(cfg.nmf.alpha),
@@ -707,6 +714,10 @@ def train(cfg: DictConfig) -> None:
             summary_payload["nmf"] = {
                 "enabled": True,
                 "apply_to_token_initializer": bool(cfg.nmf.get("apply_to_token_initializer", False)),
+                "match_mode": str(cfg.nmf.get("match_mode", "substring")),
+                "max_replacements": (
+                    int(cfg.nmf.max_replacements) if cfg.nmf.get("max_replacements", None) is not None else None
+                ),
                 "target_keywords": list(cfg.nmf.target_keywords),
                 "rank": int(cfg.nmf.rank),
                 "alpha": float(cfg.nmf.alpha),

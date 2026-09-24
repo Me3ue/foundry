@@ -20,10 +20,12 @@ else
   TARGETS=(1QLX 5OQV 1ABR 2AAI 4UY2 7UMQ 5O3L 6A6B 1MDT 1DM0 3BTA 5N0B 4JTA)
 fi
 SEEDS=(20250308 20250309 20250310)
-SAMPLES=8
-TIMESTEPS=200
+SAMPLES="${SAMPLES:-8}"
+TIMESTEPS="${TIMESTEPS:-200}"
 
-# name|partial_t|anchor_stride|hbond
+# The runner defaults to chunked pairwise inference (--low-memory-mode) so the
+# same scientific configuration can run on both 80 GB and smaller GPUs. Set
+# SAMPLES=1 for a non-scientific memory smoke test, then restore SAMPLES=8.
 CONDITIONS=(
   "C1_strong_noHB|1.0|5|off"
   "C2_strong_HB|1.0|5|on"
@@ -51,7 +53,7 @@ for target in "${TARGETS[@]}"; do
       cmd=("$PYTHON" "$RUNNER" --ids "$target" --out-dir "$run_dir"
            --structures-dir "$PDB_DIR" --checkpoint "$CKPT"
            --designs-per-target "$SAMPLES" --partial-t "$partial_t" --sequence-mode fixed
-           --anchor-stride "$anchor_stride" --timesteps "$TIMESTEPS" --seed "$seed")
+           --anchor-stride "$anchor_stride" --timesteps "$TIMESTEPS" --seed "$seed" --low-memory-mode)
       [[ "$hbond" == on ]] && cmd+=(--hbplus "$HBPLUS")
       "${cmd[@]}" 2>&1 | tee "$run_dir/run.log"
       "$PYTHON" "$EVALUATOR" --run-dir "$run_dir" 2>&1 | tee "$run_dir/evaluate.log"

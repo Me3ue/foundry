@@ -221,6 +221,8 @@ def main() -> None:
     parser.add_argument("--checkpoint", type=Path, default=None,
                         help="Path to an RFD3 .ckpt file; defaults to the registered 'rfd3' checkpoint.")
     parser.add_argument("--rfd3-command", default="rfd3 design")
+    parser.add_argument("--low-memory-mode", action="store_true",
+                        help="Use RFD3 chunked pairwise inference to lower GPU memory at the cost of speed.")
     parser.add_argument("--skip-rfd3-prevalidation", action="store_true",
                         help="Do not locally call DesignInputSpecification.safe_init() before launch.")
     parser.add_argument("--skip-gpu-preflight", action="store_true",
@@ -288,7 +290,7 @@ def main() -> None:
         f"diffusion_batch_size={args.designs_per_target}", "n_batches=1", "dump_trajectories=True",
         "prevalidate_inputs=True", "skip_existing=False", f"seed={args.seed}",
         f"inference_sampler.num_timesteps={args.timesteps}", "inference_sampler.allow_realignment=False",
-        "align_trajectory_structures=True",
+        "align_trajectory_structures=True", f"low_memory_mode={args.low_memory_mode}",
     ]
     if args.checkpoint is not None:
         command.append(f"ckpt_path={args.checkpoint}")

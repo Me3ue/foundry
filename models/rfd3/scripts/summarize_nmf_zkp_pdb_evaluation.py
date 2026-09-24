@@ -11,9 +11,9 @@ Expected layout (one directory per setting)::
 
     evaluation_root/
       baseline/val_metrics/*.csv
-      zkp_encoder/val_metrics/*.csv
-      zkp_proj/val_metrics/*.csv
-      zkp_head/val_metrics/*.csv
+      process_s_init/val_metrics/*.csv
+      process_pll/val_metrics/*.csv
+      to_r_update/val_metrics/*.csv
 
 The CSVs emitted by StoreValidationMetricsInDFCallback already contain
 ``example_id`` plus numerical metric columns.  A manifest containing every
@@ -31,7 +31,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-PREFERRED = ("baseline", "zkp_encoder", "zkp_proj", "zkp_head", "zkp_all")
+PREFERRED = ("baseline",)
 # Metrics available from RFD3's loss/design/backbone/sidechain/H-bond metric
 # stack.  Missing metrics are omitted rather than represented as zero.
 PRIMARY_METRICS = (

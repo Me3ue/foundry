@@ -14,14 +14,22 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
-PREFERRED = ["baseline", "zkp_encoder", "zkp_proj", "zkp_head", "zkp_all"]
+PREFERRED = ["baseline"]
 COLORS = {
     "baseline": "#4C4C4C",
-    "zkp_encoder": "#0072B2",
-    "zkp_proj": "#009E73",
-    "zkp_head": "#D55E00",
-    "zkp_all": "#CC79A7",
 }
+COLOR_CYCLE = ["#0072B2", "#009E73", "#D55E00", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442"]
+
+
+def ordered_tags(metrics: dict[str, pd.DataFrame]) -> list[str]:
+    discovered = list(metrics)
+    return [tag for tag in PREFERRED if tag in metrics] + sorted(
+        tag for tag in discovered if tag not in PREFERRED
+    )
+
+
+def color_for(tag: str, index: int) -> str:
+    return COLORS.get(tag, COLOR_CYCLE[index % len(COLOR_CYCLE)])
 CURVE_SPECS = [
     ("train/per_epoch_total_loss", "Total diffusion+sequence loss", False),
     ("train/per_epoch_mse_loss_mean", "Coordinate MSE", False),
@@ -52,13 +60,13 @@ def load_csv_metrics(sweep_dir: Path) -> dict[str, pd.DataFrame]:
         # Hydra CSVLogger often writes a blank header row; keep numeric epoch/step.
         if "epoch" not in df.columns and "step" in df.columns:
             df["epoch"] = df["step"]
-        tag = None
+        # Hydra logs live under train/<job_name>/.../metrics.csv. Use the
+        # current single-layer job directory rather than legacy group names.
         parts = csv_path.parts
-        for p in parts:
-            if p in PREFERRED:
-                tag = p
-                break
-        if tag is None:
+        tag = None
+        if "train" in parts:
+            tag = parts[parts.index("train") + 1]
+        if not tag:
             tag = csv_path.parent.name
         out[tag] = df
     return out
@@ -114,7 +122,7 @@ def plot_curves(metrics: dict[str, pd.DataFrame], fig_dir: Path) -> list[Path]:
     for key, ylabel, higher_better in CURVE_SPECS:
         fig, ax = plt.subplots(figsize=(4.6, 3.2))
         any_series = False
-        for tag in PREFERRED:
+        for index, tag in enumerate(ordered_tags(metrics)):
             df = metrics.get(tag)
             if df is None or key not in df.columns:
                 continue
@@ -126,7 +134,7 @@ def plot_curves(metrics: dict[str, pd.DataFrame], fig_dir: Path) -> list[Path]:
             ax.plot(
                 x[mask],
                 y[mask],
-                color=COLORS.get(tag, "black"),
+                color=color_for(tag, index),
                 label=tag.replace("_", " "),
                 linewidth=1.8,
                 marker="o",
@@ -149,7 +157,7 @@ def plot_curves(metrics: dict[str, pd.DataFrame], fig_dir: Path) -> list[Path]:
     combo_keys = CURVE_SPECS[:4]
     fig, axes = plt.subplots(2, 2, figsize=(8.4, 6.2))
     for ax, (key, ylabel, higher_better) in zip(axes.ravel(), combo_keys):
-        for tag in PREFERRED:
+        for index, tag in enumerate(ordered_tags(metrics)):
             df = metrics.get(tag)
             if df is None or key not in df.columns:
                 continue
@@ -161,7 +169,7 @@ def plot_curves(metrics: dict[str, pd.DataFrame], fig_dir: Path) -> list[Path]:
             ax.plot(
                 x[mask],
                 y[mask],
-                color=COLORS.get(tag, "black"),
+                color=color_for(tag, index),
                 label=tag.replace("_", " "),
                 linewidth=1.6,
             )
@@ -178,7 +186,7 @@ def plot_curves(metrics: dict[str, pd.DataFrame], fig_dir: Path) -> list[Path]:
 
 def write_tables(sweep_dir: Path, metrics: dict[str, pd.DataFrame], ckpt: str) -> tuple[Path, Path, Path]:
     rows = []
-    for tag in [t for t in PREFERRED if t in metrics] + [t for t in metrics if t not in PREFERRED]:
+    for tag in ordered_tags(metrics):
         df = metrics[tag]
         summary = {}
         for p in sweep_dir.glob(f"{tag}*.run_summary.json"):

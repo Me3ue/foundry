@@ -1,7 +1,7 @@
 # @package _global_
-# ZKP-oriented NMF on PDB: first-priority proof targets (input integrity).
-#
-# Most of these live in TokenInitializer, so NMF is injected into the full model.
+# ZKP encoder family, one linear at a time.
+# Default target is the unique Linear inside process_s_init.
+# Override nmf.target_keywords from the sweep to probe other encoder linears.
 
 defaults:
   - nmf_zkp_pdb
@@ -17,10 +17,7 @@ nmf:
   eps: 1.0e-6
   nonnegative_param: softplus
   apply_to_token_initializer: true
+  match_mode: exact
+  max_replacements: 1
   target_keywords:
-    - transition_post_token
-    - transition_post_atom
-    - process_s_init
-    - process_z_init
-    - process_c
-    - process_s_trunk
+    - token_initializer.process_s_init.1
