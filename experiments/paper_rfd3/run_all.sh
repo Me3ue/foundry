@@ -2,13 +2,16 @@
 # =============================================================================
 # 一键运行论文正文的全部实验，并在最后汇总成表。
 #
-#   ./run_all.sh                     # 冒烟测试规模（每条件 8 个骨架）
-#   SCALE=paper ./run_all.sh         # 论文规模（每条件 400 个骨架，很慢）
-#   WITH_SEQ=0 WITH_FOLD=0 ./run_all.sh   # 只采样骨架，不做序列设计和折叠
-#   ONLY="2 3" ./run_all.sh          # 只跑实验 2 和 3
+# 已按 6×RTX A6000 调好：每个实验内部把条件拆开铺到多张卡上，
+# 实验之间串行（否则会互相抢卡、把显存算崩）。
 #
-# 预计耗时（quick 规模，单张 11 GB GPU，8-20 骨架/条件）：
-#   实验 1-8 合计约 2-6 小时（取决于是否开启折叠）；论文规模是它的 50 倍量级。
+#   ./run_all.sh                     # 冒烟测试规模（每条件 8 个骨架）
+#   SCALE=paper ./run_all.sh         # 论文规模（每条件 400 个骨架）
+#   WITH_SEQ=0 WITH_FOLD=0 ./run_all.sh   # 只采样骨架，不做序列设计和折叠
+#   ONLY="2 3" GPUS=2,4 ./run_all.sh # 只跑实验 2/3，且只用 2、4 号卡
+#
+# 快速自检（不跑实验，只看硬件与路径）：
+#   source ./env.sh && source ./lib.sh && check_env
 # =============================================================================
 set -Eeuo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -50,8 +53,8 @@ run_step 7 ./16_exp7_conditioning.sh
 run_step 8 ./17_exp8_speed.sh
 run_step 9 ./18_exp9_wetlab_insilico.sh
 
-hdr "步骤 70：几何指标（RMSD / 界面 / RASA / 氢键）"
-"$PY" 70_metrics_geometry.py || warn "几何指标计算失败"
+hdr "步骤 70：几何指标（RMSD / 界面 / RASA / 氢键 / clash，${N_WORKERS} 进程并行）"
+"$PY" 70_metrics_geometry.py --workers "$N_WORKERS" || warn "几何指标计算失败"
 
 hdr "步骤 90：汇总"
 "$PY" 90_summarize.py
@@ -64,3 +67,4 @@ hdr "全部完成，用时 $((ELAPSED/3600))h$(((ELAPSED%3600)/60))m"
 ok "报告: $REPORTS_DIR/paper_experiments_report.md"
 ok "逐条件统计: $METRICS_DIR/summary_by_condition.csv"
 ok "逐设计明细: $METRICS_DIR/per_design.csv"
+ok "GPU 池日志: $LOGS_DIR/gpu_pool/"

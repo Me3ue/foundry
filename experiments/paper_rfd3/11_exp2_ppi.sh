@@ -13,13 +13,15 @@
 #   * 再用 TM-score 0.6 做 complete-linkage 聚类，统计"成功簇数"
 #     （论文：RFD3 平均 8.2 个成功簇 vs RFD1 1.4 个）
 #
+# 多卡：**每个靶点占一张卡**，5 个靶点正好铺满 5 张 A6000。
+#       参数只影响吞吐不影响统计口径，所以分卡跑与原版等价。
+#
 # 备注：论文的 benchmark 用 η=1.5, γ0=0.6（与全局默认一致）。
 #       官方文档给的"生产推荐"是 step_scale=3, gamma_0=0.2，命中率更高但更同质。
-#       想复现官方推荐可以：STEP_SCALE=3 GAMMA_0=0.2 ./11_exp2_ppi.sh
 #
 # 运行：
-#   PPI_TARGETS="pdl1 insulinr" ./11_exp2_ppi.sh
-#   SCALE=paper PPI_TARGETS="pdl1 insulinr tie2 il7ra il2ra" ./11_exp2_ppi.sh
+#   ./11_exp2_ppi.sh
+#   SCALE=paper PPI_TARGETS="pdl1 insulinr tie2 il2ra il7ra" ./11_exp2_ppi.sh
 # =============================================================================
 set -Eeuo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -28,37 +30,41 @@ source ./lib.sh
 
 hdr "实验 2：蛋白结合蛋白（§3.1 / Fig. 3a）"
 SPEC="$INPUTS_DIR/specs/exp2_ppi.json"
-[[ -f "$SPEC" ]] || die "缺少 $SPEC，请先运行 python 01_prepare_inputs.py"
+[[ -f "$SPEC" ]] || die "缺少 $SPEC，请先运行 02_extract_repo_benchmarks.py + 01_prepare_inputs.py"
 DEST="$DESIGNS_DIR/exp2_ppi"
 
-# 只保留用户选中的靶点，生成一个筛选后的规格文件
-"$PY" - "$SPEC" "$INPUTS_DIR/specs/exp2_ppi_selected.json" $PPI_TARGETS <<'PY'
-import json, sys
-spec = json.load(open(sys.argv[1]))
-keep = set(sys.argv[3:])
-sub = {k: v for k, v in spec.items() if k in keep}
-json.dump(sub, open(sys.argv[2], "w"), indent=2)
-print(f"选中靶点: {list(sub)}")
-PY
-SPEC_SEL="$INPUTS_DIR/specs/exp2_ppi_selected.json"
+# 按靶点拆成独立规格，这样每个靶点可以单独占一张卡
+SPLIT_DIR="$INPUTS_DIR/specs/exp2_split"
+mapfile -t PAIRS < <(split_spec "$SPEC" "$SPLIT_DIR")
+[[ ${#PAIRS[@]} -gt 0 ]] || die "$SPEC 里没有靶点"
 
-for seed in $SEEDS; do
-  run_dir="$DEST/all/seed_${seed}"
-  log="$LOGS_DIR/exp2_ppi_seed${seed}.log"
-  log "每靶点骨架数=$N_BACKBONES  seed=$seed"
-  ( time rfd3_design "$run_dir" "$SPEC_SEL" "$N_BACKBONES" seed="$seed" ) 2>&1 \
-      | tee "$log" || warn "RFD3 运行异常"
-  record_run exp2_ppi "all" "$N_BACKBONES" "seed=$seed"
-done
+build_jobs() {
+  local pair key path seed
+  for pair in "${PAIRS[@]}"; do
+    key="${pair%%$'\t'*}"; path="${pair#*$'\t'}"
+    # 用户没指定就用全部靶点
+    if [[ -n "$PPI_TARGETS" && " $PPI_TARGETS " != *" $key "* ]]; then continue; fi
+    for seed in $SEEDS; do
+      rfd3_design_cmd "$DEST/$key/seed_${seed}" "$path" "$N_BACKBONES" "seed=$seed"
+      printf '\n'
+      record_run exp2_ppi "$key" "$N_BACKBONES" "seed=$seed"
+    done
+  done
+}
+
+build_jobs | run_on_gpus "$MAX_PARALLEL_GPUS" \
+  || warn "部分靶点失败（日志见 $LOGS_DIR/gpu_pool/）"
 
 if [[ "${WITH_SEQ:-1}" == "1" ]]; then
-  hdr "实验 2：ProteinMPNN 序列设计（4 条/骨架）"
+  hdr "实验 2：ProteinMPNN 序列设计（4 条/骨架，${N_WORKERS} 进程并行）"
   "$PY" 50_sequence_design.py --experiment exp2_ppi \
-        --model protein_mpnn --n-seqs "${MPNN_SEQS}" || warn "序列设计失败"
+        --model protein_mpnn --n-seqs "$MPNN_SEQS" --workers "$N_WORKERS" \
+        || warn "序列设计失败"
 fi
 if [[ "${WITH_FOLD:-1}" == "1" ]]; then
   hdr "实验 2：结构预测（AF3 等价判据需要 PAE / pTM）"
-  "$PY" 60_fold.py --experiment exp2_ppi || warn "折叠失败"
+  "$PY" 60_fold.py --experiment exp2_ppi --parallel "$FOLD_PARALLEL_GPUS" \
+        || warn "折叠失败"
 fi
 
 hdr "实验 2 完成"

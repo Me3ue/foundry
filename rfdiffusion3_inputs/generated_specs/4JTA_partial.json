@@ -1,6 +1,6 @@
 {
   "4JTA": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/4JTA_B.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/4JTA_B.pdb",
     "partial_t": 9.0,
     "select_unfixed_sequence": "B362-386",
     "dialect": 2,

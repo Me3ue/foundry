@@ -1,0 +1,3 @@
+# GPU 池任务清单样例：每行一条完整 shell 命令
+# 由 lib.sh 的 run_on_gpus 读取，再用 lib/gpu_pool.py 按显存铺到多张卡上
+echo hello-from-gpu-job

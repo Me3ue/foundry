@@ -1,6 +1,6 @@
 {
   "3BTA": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/3BTA_A.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/3BTA_A.pdb",
     "select_fixed_atoms": {
       "A255": "BKBN",
       "A256": "BKBN",

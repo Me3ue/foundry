@@ -633,11 +633,14 @@ def train(cfg: DictConfig) -> None:
             trainer.fit(
                 train_loader=train_loader, val_loaders=val_loaders, ckpt_config=ckpt_config
             )
-        # Save before the explicit holdout pass. Validation can still OOM on a
-        # remaining oversized example; the trained weights must not be lost.
-        if getattr(trainer, "output_dir", None):
+        # Checkpointing is optional for sweeps. Disable it when only metrics and
+        # replacement metadata are required; this avoids writing large model files.
+        save_checkpoints = bool(cfg.get("save_checkpoints", True))
+        if save_checkpoints and getattr(trainer, "output_dir", None):
             ranked_logger.info("Saving checkpoint after fit, before final validation.")
             trainer.save_checkpoint()
+        elif not save_checkpoints:
+            ranked_logger.info("Checkpoint saving disabled by save_checkpoints=false.")
         # Run one explicit final validation after fit. This is intentionally
         # independent of the trainer's periodic should_validate predicate: the
         # sweep must always produce comparable holdout metrics for every variant.

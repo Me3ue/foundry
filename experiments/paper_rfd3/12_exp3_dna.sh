@@ -13,9 +13,11 @@
 #     分档统计：<1.5 Å / 1.5-3 Å / 3-5 Å
 #   * 论文结论：单体 8.67% / 二体 6.67% 通过率（<5 Å）
 #
+# 多卡：2 设置 × 3 靶点 = 6 个任务，正好铺满 6 张 A6000。
+#
 # 运行：
 #   ./12_exp3_dna.sh
-#   SCALE=paper DNA_TARGETS="7rte 7n5u 7m5w" ./12_exp3_dna.sh
+#   SCALE=paper ./12_exp3_dna.sh
 # =============================================================================
 set -Eeuo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -28,41 +30,38 @@ for f in exp3_dna_rigid.json exp3_dna_diffused.json; do
 done
 DEST="$DESIGNS_DIR/exp3_dna"
 
-# 按 DNA_TARGETS 过滤（规格 key 形如 7rte_a_rigid）
-filter_spec() {
-  "$PY" - "$1" "$2" $DNA_TARGETS <<'PY'
-import json, sys
-spec = json.load(open(sys.argv[1]))
-keep = tuple(sys.argv[3:])
-sub = {k: v for k, v in spec.items() if any(k.startswith(p) for p in keep)}
-json.dump(sub, open(sys.argv[2], "w"), indent=2)
-print(f"{sys.argv[2]}: {list(sub)}")
-PY
-}
-filter_spec "$INPUTS_DIR/specs/exp3_dna_rigid.json"    "$INPUTS_DIR/specs/exp3_dna_rigid_sel.json"
-filter_spec "$INPUTS_DIR/specs/exp3_dna_diffused.json" "$INPUTS_DIR/specs/exp3_dna_diffused_sel.json"
-
-for setting in rigid diffused; do
-  for seed in $SEEDS; do
-    run_dir="$DEST/$setting/seed_${seed}"
-    log="$LOGS_DIR/exp3_dna_${setting}_seed${seed}.log"
-    log "设置=$setting  每靶点骨架数=$N_BACKBONES  seed=$seed"
-    ( time rfd3_design "$run_dir" "$INPUTS_DIR/specs/exp3_dna_${setting}_sel.json" \
-        "$N_BACKBONES" seed="$seed" ) 2>&1 | tee "$log" || warn "$setting 运行异常"
-    record_run exp3_dna "$setting" "$N_BACKBONES" "seed=$seed"
+build_jobs() {
+  local setting spec pair key path seed
+  for setting in rigid diffused; do
+    spec="$INPUTS_DIR/specs/exp3_dna_${setting}.json"
+    while IFS=$'\t' read -r key path; do
+      # 按 DNA_TARGETS 过滤（key 形如 7rte_a_rigid）
+      key_matches "$key" $DNA_TARGETS || continue
+      for seed in $SEEDS; do
+        rfd3_design_cmd "$DEST/$setting/$key/seed_${seed}" "$path" "$N_BACKBONES" \
+          "seed=$seed"
+        printf '\n'
+        record_run exp3_dna "$setting" "$N_BACKBONES" "target=$key seed=$seed"
+      done
+    done < <(split_spec "$spec" "$INPUTS_DIR/specs/exp3_split")
   done
-done
+}
+
+build_jobs | run_on_gpus "$MAX_PARALLEL_GPUS" \
+  || warn "部分任务失败（日志见 $LOGS_DIR/gpu_pool/）"
 
 if [[ "${WITH_SEQ:-1}" == "1" ]]; then
-  hdr "实验 3：LigandMPNN 序列设计（4 条/骨架）"
+  hdr "实验 3：LigandMPNN 序列设计（4 条/骨架，${N_WORKERS} 进程并行）"
   "$PY" 50_sequence_design.py --experiment exp3_dna \
-        --model ligand_mpnn --n-seqs "${MPNN_SEQS}" || warn "序列设计失败"
+        --model ligand_mpnn --n-seqs "$MPNN_SEQS" --workers "$N_WORKERS" \
+        || warn "序列设计失败"
 fi
 if [[ "${WITH_FOLD:-1}" == "1" ]]; then
   hdr "实验 3：结构预测"
-  "$PY" 60_fold.py --experiment exp3_dna || warn "折叠失败"
+  "$PY" 60_fold.py --experiment exp3_dna --parallel "$FOLD_PARALLEL_GPUS" \
+        || warn "折叠失败"
 fi
 
 hdr "实验 3 完成"
 ok "设计结果: $DEST"
-ok "下一步：用 70_metrics_geometry.py 计算 DNA-aligned RMSD，再 90_summarize.py"
+ok "下一步：python 70_metrics_geometry.py --experiment exp3_dna（算 DNA-aligned RMSD）"

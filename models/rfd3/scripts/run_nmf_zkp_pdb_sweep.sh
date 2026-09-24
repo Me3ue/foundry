@@ -20,6 +20,7 @@
 #   LAYER_SET=one LAYER=token_initializer.process_pll bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
 # Optional env:
 #   DATA=... PARQUET=... PDB_MIRROR=... LOG_ROOT=... CKPT=... PYTHON=python SEED=42 MAX_EPOCHS=5
+#   GPU=2  (default: use idle RTX A6000 GPU 2; set GPU=4 if needed)
 
 set -uo pipefail
 
@@ -29,16 +30,23 @@ cd "$REPO_ROOT"
 # stale copies installed into the conda env's site-packages.
 export PYTHONPATH="${REPO_ROOT}/src:${REPO_ROOT}/models/rfd3/src:${REPO_ROOT}/models/rfd3na/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-DATA="${DATA:-/media/zzj/Data/pdb_metadata_latest}"
-PARQUET="${PARQUET:-${DATA}}"
+DATA="${DATA:-/dev/shm/pdb_metadata_latest}"
+PARQUET="${PARQUET:-/dev/shm/pdb_metadata_latest}"
 # CIF/PDB mirror is separate from metadata parquet. The metadata dir only has
 # interfaces_df.parquet / pn_units_df.parquet / rfd3_latest.ckpt.
-PDB_MIRROR="${PDB_MIRROR:-/media/zzj/Data/pdb_mirror}"
+PDB_MIRROR="${PDB_MIRROR:-/dev/shm/pdb_mirror}"
+# AtomWorks resolves the chemical component dictionary through this environment variable.
+export CCD_MIRROR_PATH="${CCD_MIRROR_PATH:-/dev/shm/ccd_mirror}"
+export CCD_PATH="${CCD_PATH:-/dev/shm/ccd_mirror}"
 # H-bond featurization (calculate_hbonds=0.2) shells out to HBPLUS. The binary
-# on this machine lives under /root, not the old /home/zzj path baked into env.
+# on this machine lives under /root, not the old /home/zhangzijian path baked into env.
 export HBPLUS_PATH="${HBPLUS_PATH:-/root/protein/HBPLUS/hbplus/hbplus}"
+# GPU 2 is currently idle on the supplied machine. Override with GPU=4 if
+# another free A6000 is preferred; do not use busy GPUs 0, 1, 3, or 5.
+GPU="${GPU:-2}"
+export CUDA_VISIBLE_DEVICES="${GPU}"
 LOG_ROOT="${LOG_ROOT:-/root/protein/foundry/logs/train_nmf_zkp_pdb}"
-CKPT="${CKPT:-/media/zzj/Data/pdb_metadata_latest/rfd3_latest.ckpt}"
+CKPT="${CKPT:-/dev/shm/pdb_metadata_latest/rfd3_latest.ckpt}"
 # Prefer the project rc environment when PYTHON is not explicitly supplied.
 # The system/base Python may resolve to a different site-packages tree and can
 # silently hide a broken dependency installation.
@@ -87,6 +95,8 @@ COMMON_OVERRIDES=(
   "logger=csv"
   "seed=${SEED}"
   "trainer.max_epochs=${MAX_EPOCHS}"
+  "save_checkpoints=false"
+  "trainer.checkpoint_every_n_epochs=1000000000"
   "datasets.diffusion_batch_size_train=${DIFFUSION_BS:-4}"
   "datasets.crop_size=${CROP_SIZE:-256}"
   "datasets.max_atoms_in_crop=${MAX_ATOMS:-1920}"
@@ -94,8 +104,8 @@ COMMON_OVERRIDES=(
   # Disable periodic validation; train_lora.py performs exactly one explicit
   # validation after fit completes.
   "trainer.validate_every_n_epochs=1000000000"
-  "dataloader.train.dataloader_params.num_workers=${NUM_WORKERS:-8}"
-  "dataloader.train.dataloader_params.prefetch_factor=${PREFETCH:-4}"
+  "dataloader.train.dataloader_params.num_workers=${NUM_WORKERS:-2}"
+  "dataloader.train.dataloader_params.prefetch_factor=${PREFETCH:-2}"
 )
 
 LAYER_SET="${LAYER_SET:-encoder}"

@@ -1,6 +1,6 @@
 {
   "5O3L": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/5O3L_A.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/5O3L_A.pdb",
     "partial_t": null,
     "dialect": 2,
     "extra": {

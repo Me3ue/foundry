@@ -1,6 +1,6 @@
 {
   "1ABR": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/1ABR_B.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/1ABR_B.pdb",
     "select_fixed_atoms": {
       "B44": "BKBN",
       "B45": "BKBN",

@@ -15,8 +15,11 @@
 #   * 附加分析（Fig. S4b-d）：FoldSeek 新颖性、Rosetta ΔΔG、
 #                               RDKit 构象 RMSD（每个配体 50 个构象）
 #
+# 多卡：2 条件 × 4 配体 = 8 个任务，按空闲显存自动铺到 6 张卡上。
+#       diffused 模式的 CFG 会让单次显存略高，GPU_JOB_MEM 已按 25 GB 预留。
+#
 # 运行：
-#   SM_LIGANDS="IAI" ./13_exp4_small_molecule.sh
+#   ./13_exp4_small_molecule.sh
 #   SCALE=paper SM_LIGANDS="FAD SAM IAI OQO" ./13_exp4_small_molecule.sh
 # =============================================================================
 set -Eeuo pipefail
@@ -30,36 +33,47 @@ for f in exp4_sm_fixed.json exp4_sm_diffused.json; do
 done
 DEST="$DESIGNS_DIR/exp4_small_molecule"
 
-for mode in fixed diffused; do
-  for seed in $SEEDS; do
-    run_dir="$DEST/$mode/seed_${seed}"
-    log="$LOGS_DIR/exp4_sm_${mode}_seed${seed}.log"
-    extra=()
-    if [[ "$mode" == "diffused" ]]; then
-      # 论文："diffused-ligand binders were generated with the RASA condition
-      #        set to buried and a CFG scale of 2"
-      extra+=(inference_sampler.use_classifier_free_guidance=True
-              inference_sampler.cfg_scale="$CFG_SCALE")
-    fi
-    log "模式=$mode  每配体骨架数=$N_BACKBONES  seed=$seed"
-    ( time rfd3_design "$run_dir" "$INPUTS_DIR/specs/exp4_sm_${mode}.json" \
-        "$N_BACKBONES" seed="$seed" "${extra[@]}" ) 2>&1 \
-        | tee "$log" || warn "$mode 运行异常"
-    record_run exp4_small_molecule "$mode" "$N_BACKBONES" "seed=$seed"
+build_jobs() {
+  local mode spec key path seed
+  for mode in fixed diffused; do
+    spec="$INPUTS_DIR/specs/exp4_sm_${mode}.json"
+    while IFS=$'\t' read -r key path; do
+      key_matches "$key" $SM_LIGANDS || continue
+      for seed in $SEEDS; do
+        if [[ "$mode" == "diffused" ]]; then
+          # 论文："diffused-ligand binders were generated with the RASA
+          #        condition set to buried and a CFG scale of 2"
+          rfd3_design_cmd "$DEST/$mode/$key/seed_${seed}" "$path" "$N_BACKBONES" \
+            "seed=$seed" \
+            "inference_sampler.use_classifier_free_guidance=True" \
+            "inference_sampler.cfg_scale=$CFG_SCALE"
+        else
+          rfd3_design_cmd "$DEST/$mode/$key/seed_${seed}" "$path" "$N_BACKBONES" \
+            "seed=$seed"
+        fi
+        printf '\n'
+        record_run exp4_small_molecule "$mode" "$N_BACKBONES" "ligand=$key seed=$seed"
+      done
+    done < <(split_spec "$spec" "$INPUTS_DIR/specs/exp4_split")
   done
-done
+}
+
+build_jobs | run_on_gpus "$MAX_PARALLEL_GPUS" \
+  || warn "部分任务失败（日志见 $LOGS_DIR/gpu_pool/）"
 
 if [[ "${WITH_SEQ:-1}" == "1" ]]; then
-  hdr "实验 4：LigandMPNN 序列设计（8 条/骨架）"
+  hdr "实验 4：LigandMPNN 序列设计（8 条/骨架，${N_WORKERS} 进程并行）"
   "$PY" 50_sequence_design.py --experiment exp4_small_molecule \
-        --model ligand_mpnn --n-seqs "$LIGAND_MPNN_SEQS" || warn "序列设计失败"
+        --model ligand_mpnn --n-seqs "$LIGAND_MPNN_SEQS" --workers "$N_WORKERS" \
+        || warn "序列设计失败"
 fi
 if [[ "${WITH_FOLD:-1}" == "1" ]]; then
-  hdr "实验 4：结构预测"
-  "$PY" 60_fold.py --experiment exp4_small_molecule || warn "折叠失败"
+  hdr "实验 4：结构预测（最多并行 $FOLD_PARALLEL_GPUS 卡）"
+  "$PY" 60_fold.py --experiment exp4_small_molecule \
+        --parallel "$FOLD_PARALLEL_GPUS" || warn "折叠失败"
 fi
 
 hdr "实验 4 完成"
 ok "设计结果: $DEST"
 warn "RFdiffusionAA 基线需在 https://github.com/baker-laboratory/RoseTTAFold-All-Atom 单独跑"
-warn "Rosetta ΔΔG（DDGnoRepack）与 FoldSeek 新颖性见 README「外部工具」一节"
+warn "Rosetta ΔΔG（DDGnoRepack）与 FoldSeek 新颖性见 COMMANDS.md §B.3"

@@ -16,13 +16,14 @@ import os
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import common  # noqa: E402
 
-RC_ENV_BIN = Path(os.environ.get("RC_ENV_BIN", "/home/zzj/anaconda3/envs/rc/bin"))
+RC_ENV_BIN = Path(os.environ.get("RC_ENV_BIN", "/home/zhangzijian/anaconda3/envs/rc/bin"))
 MPNN = RC_ENV_BIN / "mpnn"
 
 DESIGN_PATTERNS = ("*_denoised_model_*.cif.gz", "*_denoised_model_*.cif",
@@ -174,6 +175,9 @@ def main() -> int:
                     default="auto")
     ap.add_argument("--n-seqs", type=int, default=4)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--workers", type=int,
+                    default=int(os.environ.get("N_WORKERS", "8")),
+                    help="并行进程数（MPNN 是 CPU 任务，大内存机器直接开 NPROC/2）")
     ap.add_argument("--overwrite", action="store_true")
     args = ap.parse_args()
 
@@ -196,7 +200,8 @@ def main() -> int:
         print(f"找不到 mpnn 可执行文件: {MPNN}", file=sys.stderr)
         return 1
 
-    n_ok = n_fail = 0
+    # 先把所有待办任务收集起来，再丢进进程池
+    tasks: list[tuple[str, Path, Path, str, str | None, str | None, Path]] = []
     for exp in experiments:
         exp_dir = common.DESIGNS_DIR / exp
         if not exp_dir.exists():
@@ -213,15 +218,11 @@ def main() -> int:
                 if out_dir.exists() and not args.overwrite:
                     hits = list(out_dir.glob("*.fa")) + list(out_dir.glob("*.fasta"))
                     if hits:
-                        n_ok += 1
                         continue
                 mtype = args.model
                 if mtype == "auto":
                     mtype = "ligand_mpnn" if exp in LIGAND_EXPERIMENTS else "protein_mpnn"
-                if exp in PROTEIN_EXPERIMENTS and mtype == "protein_mpnn":
-                    ck = protein_ckpt
-                else:
-                    ck = ckpt if mtype == "ligand_mpnn" else protein_ckpt
+                ck = ckpt if mtype == "ligand_mpnn" else protein_ckpt
                 if not Path(ck).exists():
                     print(f"  [skip] 缺少 MPNN 权重 {ck}")
                     return 1
@@ -230,16 +231,41 @@ def main() -> int:
                 chains = None
                 if not fixed:
                     chains = designed_chains_for(design, exp, spec_entry_for(exp, key))
-                ok = run_mpnn(mtype, design, out_dir, args.n_seqs, fixed, Path(ck),
-                              seed=args.seed, designed_chains=chains)
-                n_ok += int(ok)
-                n_fail += int(not ok)
-                if ok:
-                    detail = f"fixed={fixed}" if fixed else (
-                        f"designed_chains={chains}" if chains else "全部重设计")
-                    print(f"  ok  {stem}  ({mtype}, {args.n_seqs} 条序列, {detail})")
+                tasks.append((mtype, design, out_dir, stem, fixed, chains, Path(ck)))
+
+    if not tasks:
+        print("没有需要处理的设计（都已经有序列了）。")
+        return 0
+
+    n_ok = n_fail = 0
+    workers = max(1, args.workers)
+    print(f"\n共 {len(tasks)} 个骨架待设计，用 {workers} 个进程并行\n")
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futures = {
+            pool.submit(_run_one, t, args.n_seqs, args.seed): t for t in tasks
+        }
+        for fut in as_completed(futures):
+            mtype, design, _, stem, fixed, chains, _ = futures[fut]
+            try:
+                ok = fut.result()
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [err] {stem}: {type(exc).__name__}: {exc}")
+                ok = False
+            n_ok += int(ok)
+            n_fail += int(not ok)
+            if ok:
+                detail = f"fixed={fixed}" if fixed else (
+                    f"designed_chains={chains}" if chains else "全部重设计")
+                print(f"  ok  {stem}  ({mtype}, {args.n_seqs} 条序列, {detail})")
+
     print(f"\n完成：成功 {n_ok}，失败 {n_fail}")
     return 0
+
+
+def _run_one(task, n_seqs: int, seed: int) -> bool:
+    mtype, design, out_dir, _stem, fixed, chains, ckpt = task
+    return run_mpnn(mtype, design, out_dir, n_seqs, fixed, ckpt,
+                    seed=seed, designed_chains=chains)
 
 
 def _design_key(stem: str, experiment: str) -> str:

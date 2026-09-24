@@ -1,6 +1,6 @@
 {
   "4UY2": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/4UY2_A.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/4UY2_A.pdb",
     "partial_t": 7.5,
     "select_unfixed_sequence": "A5-24,A176-203",
     "dialect": 2,

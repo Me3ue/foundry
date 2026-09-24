@@ -20,7 +20,7 @@
 ## 0. 三分钟上手
 
 ```bash
-cd /home/zzj/protein/foundry/experiments/paper_rfd3
+cd /home/zhangzijian/protein/foundry/experiments/paper_rfd3
 
 # 0) 从仓库自带配置里导出论文 benchmark 定义（PPI 五个靶点 + holdout 清单）
 python 02_extract_repo_benchmarks.py
@@ -82,9 +82,9 @@ python 90_summarize.py
 
 | 项目 | 路径 |
 |---|---|
-| Foundry/RFD3 Python 环境 | `/home/zzj/anaconda3/envs/rc`（含 `rfd3` / `mpnn` / `rf3` / `rfd3na` 命令） |
+| Foundry/RFD3 Python 环境 | `/home/zhangzijian/anaconda3/envs/rc`（含 `rfd3` / `mpnn` / `rf3` / `rfd3na` 命令） |
 | RFD3 权重 | `/media/zzj/Data/rfd3_latest.ckpt` |
-| HBPLUS | `/home/zzj/protein/HBPLUS/hbplus/hbplus` |
+| HBPLUS | `/home/zhangzijian/protein/HBPLUS/hbplus/hbplus` |
 | TMalign（多样性聚类用） | `/usr/bin/TMalign` |
 
 所有路径都能用环境变量覆盖，例如：
@@ -381,7 +381,57 @@ python 90_summarize.py --experiment exp2_ppi exp3_dna
 
 ---
 
-## 6. 规模与显存
+## 6. 硬件适配与规模
+
+### 6.1 本机配置（6× RTX A6000 + 503 GB 内存）
+
+`env.sh` 已经按这套硬件调好，**不需要手工改任何东西**：
+
+| 配置项 | 取值 | 原因 |
+|---|---|---|
+| `LOW_MEMORY` | `False` | A6000 有 48 GB，不需要分块 tokenization 的降级路径 |
+| `DIFFUSION_BATCH_SIZE` | `8` | 论文原版默认值；只影响吞吐不影响采样分布 |
+| `MAX_PARALLEL_GPUS` | `auto` | 按当前空闲显存决定并行度 |
+| `GPU_POOL_MIN_FREE` | 25000 MiB | 空闲不足 25 GB 的卡不再往上排任务 |
+| `GPU_JOB_MEM` | 25000 MiB | 单任务预扣显存，避免超卖 |
+| `N_WORKERS` | `nproc/2`（上限 32） | MPNN / 几何指标的进程数 |
+| `OMP_NUM_THREADS` | 4 | 防止 N 个进程 × M 线程互相抢 CPU |
+
+**每个实验内部把条件拆开铺到多张卡上**（由 `lib/gpu_pool.py` 调度）：
+
+| 实验 | 并行任务数 | 每任务 |
+|---|---|---|
+| 1 无条件 | 4 | 每个 η |
+| 2 PPI | 4–5 | 每个靶点 |
+| 3 DNA | 6 | 2 设置 × 3 靶点 |
+| 4 小分子 | 8 | 2 条件 × 4 配体 |
+| 5 酶 AME | **41** | 每个活性位点案例 |
+| 6 对称 | 4 | D2/C3/C5/C7 |
+| 7 条件控制 | 13 | 各对照组 |
+| 8 速度 | 1（串行） | 测速必须独占 GPU |
+| 9 湿实验计算 | 3 | 两阶段 + 水解酶 |
+
+实验之间**串行**执行——每个实验自己就会吃满 GPU 池，再并行只会互相抢卡。
+
+### 6.2 常用调法
+
+```bash
+# 只用几张指定的卡（比如别人在占 0/1/3/5）
+GPUS=2,4 ./run_all.sh
+
+# 显存充足时提高吞吐（不改采样分布，只缩短墙钟时间）
+DIFFUSION_BATCH_SIZE=16 ./run_all.sh
+
+# 前端调小并行度，避免打扰同机的其他人
+MAX_PARALLEL_GPUS=2 GPU_POOL_MIN_FREE=40000 ./run_all.sh
+
+# 产物别放在 /dev/shm（上千个 CIF 会吃内存）
+OUT=/scratch/$USER/rfd3_paper ./run_all.sh
+```
+
+想看当前分配情况：`source ./env.sh && source ./lib.sh && gpu_table`
+
+### 6.3 规模档位
 
 | SCALE | 骨架数/条件 | MPNN 序列数/骨架 | 说明 |
 |---|---|---|---|
@@ -389,19 +439,9 @@ python 90_summarize.py --experiment exp2_ppi exp3_dna
 | `half` | 200 | 4 | 半规模，指标已有统计意义 |
 | `paper` | 400 | 4（小分子/酶为 8） | 论文规模 |
 
-显存建议：本机 11.5 GB 卡曾出现 `CUDA out of memory`。已经默认打开：
-
-```bash
-LOW_MEMORY=True            # 等价于 rfd3 的 low_memory_mode（分块 tokenization）
-DIFFUSION_BATCH_SIZE=4     # 单次前向的样本数，显存不够就降到 2 或 1
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True   # 已在 env.sh 里设好
-```
-
-降到 1 只是把一次 forward 的样本数变小，总骨架数由 `n_batches` 控制，
+显存不够时的兜底：`LOW_MEMORY=True DIFFUSION_BATCH_SIZE=1`。
+减小 batch 只是把一次 forward 的样本数变小，总骨架数由 `n_batches` 控制，
 **科学口径不变**（`rfd3_design` 会自动把 N 个骨架拆成 `ceil(N/batch)` 次）。
-
-实测建议：先用 `SAMPLES=1`（或在 env.sh 里 `N_BACKBONES=1 DIFFUSION_BATCH_SIZE=1`）
-跑一遍确认显存够用，再放大规模。
 
 ---
 
@@ -412,18 +452,19 @@ experiments/paper_rfd3/
 ├── README.md                  # 本文件：实验手册
 ├── COMMANDS.md                # 论文设备规模 + 标准运行指令（无本机降级）
 ├── DATASETS.md                # 数据集怎么获取与组织（含仓库自带 benchmark 的位置）
-├── env.sh                     # 全部路径与超参数（可用环境变量覆盖）
-├── lib.sh                     # bash 工具：日志 / rfd3_design / mpnn_design / fold_batch
+├── env.sh                     # 全部路径与超参数（含硬件自动探测，可环境变量覆盖）
+├── lib.sh                     # bash 工具：日志 / rfd3_design_cmd / run_on_gpus / check_env
 ├── lib/
+│   ├── gpu_pool.py            # 多卡调度器：按显存把任务铺到 6 张 A6000 上
 │   ├── common.py              # 路径约定 + 论文各实验的 RFD3 输入规格构造
-│   ├── metrics.py             # 几何原语(aligned_rmsd/TM/聚类)、RASA、氢键、clash、判据
+│   ├── metrics.py             # 几何原语(aligned_rmsd/TM 并行聚类)、RASA、氢键、clash、判据
 │   └── summarize.py           # 扫描 out/ → CSV + Markdown 对照报告
 ├── 01_prepare_inputs.py       # 下载并整理所有输入结构，生成设计规格
 ├── 02_extract_repo_benchmarks.py  # 从仓库 val/ 配置导出论文 benchmark 定义
-├── 10…18_*.sh                 # 实验 1-9（对应论文各处）
-├── 50_sequence_design.py      # 批量 MPNN 序列设计（自动判断只重设计 binder）
-├── 60_fold.py                 # 批量结构预测（rf3 / af3 / chai 可切换）
-├── 70_metrics_geometry.py     # 各种 aligned-RMSD / 界面 / RASA / 氢键 / clash 指标
+├── 10…18_*.sh                 # 实验 1-9（各自内部多卡并行）
+├── 50_sequence_design.py      # 批量 MPNN 序列设计（多进程，自动只重设计 binder）
+├── 60_fold.py                 # 批量结构预测（分片 + 多卡，rf3 / af3 / chai）
+├── 70_metrics_geometry.py     # 各种 aligned-RMSD / 界面 / RASA / 氢键 / clash（多进程）
 ├── 90_summarize.py            # 汇总
 ├── 91_plot_speed.py           # Fig. 1d 曲线（纯 Python 输出 SVG，无依赖）
 ├── run_all.sh                 # 一键跑全部 + 汇总
@@ -435,11 +476,20 @@ experiments/paper_rfd3/
 ## 8. 常见问题
 
 **Q：`rfd3: command not found`**
-`env.sh` 默认指向 `/home/zzj/anaconda3/envs/rc/bin`。换了环境就设 `RC_ENV_BIN=<你的>/bin`。
+`env.sh` 默认指向 `/home/zhangzijian/anaconda3/envs/rc/bin`。换了环境就设 `RC_ENV_BIN=<你的>/bin`。
 
-**Q：`OutOfMemoryError: CUDA out of memory`**
-把 `DIFFUSION_BATCH_SIZE` 降到 1，确认 `LOW_MEMORY=True`，并保留
-`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`。
+**Q：某个任务报 `OutOfMemoryError: CUDA out of memory`**
+A6000 48 GB 正常情况下不会 OOM（`GPU_JOB_MEM` 已按 25 GB 预扣）。真遇到时按顺序试：
+
+1. `GPU_JOB_MEM=35000 ./run_all.sh` —— 提高单任务预扣，让调度器少往同一张卡塞；
+2. `DIFFUSION_BATCH_SIZE=4` —— 减小单次 forward 的样本数（总骨架数仍由 `n_batches` 控制，口径不变）；
+3. `GPU_POOL_MIN_FREE=40000` —— 只往明显空闲的卡上排；
+4. 如果是**别的程序**占了卡：`GPUS=2,4 ./run_all.sh` 指定专用卡。
+
+**Q：跑得比预期慢 / GPU 没吃满**
+先 `source ./env.sh && source ./lib.sh && gpu_table` 看有几张卡真空闲。
+如果只有 1–2 张卡满足 `GPU_POOL_MIN_FREE=25000`，并行度自然只有 1–2；
+可以调低门槛：`GPU_POOL_MIN_FREE=15000 ./run_all.sh`。
 
 **Q：`90_summarize.py` 里一堆 `no_fold`**
 说明折叠这一环没跑。检查 `WITH_FOLD=1`、`FOLD_BACKEND` 是否正确，

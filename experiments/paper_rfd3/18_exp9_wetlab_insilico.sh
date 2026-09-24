@@ -33,6 +33,16 @@ DEST="$DESIGNS_DIR/exp9_wetlab_insilico"
 MOTIF_DIR="$INPUTS_DIR/motifs"
 mkdir -p "$MOTIF_DIR"
 
+# 任务清单：最后一次性提交到 GPU 池并行跑
+JOBS="$LOGS_DIR/exp9_jobs.txt"
+: > "$JOBS"
+add_job() {                       # add_job <out_dir> <spec> <condition> <note> [n_backbones]
+  local out_dir="$1" spec="$2" condition="$3" note="$4" n="${5:-$N_BACKBONES}"
+  rfd3_design_cmd "$out_dir" "$spec" "$n" >> "$JOBS"
+  printf '\n' >> "$JOBS"
+  record_run exp9_wetlab_insilico "$condition" "$n" "$note"
+}
+
 # ------------------------------------------------- (a) DNA 结合物两阶段 ---
 hdr "实验 9a：DNA 结合物两阶段流程（Fig. 4a / Fig. S7a）"
 TARGET_SEQ="${DBRFD3_TARGET_SEQ:-CGAGAACATAGTCG}"
@@ -76,9 +86,7 @@ fi
 for stage in stage1 stage2; do
   spec="$INPUTS_DIR/specs/exp9_dbrfd3_${stage}.json"
   [[ -f "$spec" ]] || continue
-  ( time rfd3_design "$DEST/dbrfd3/$stage" "$spec" "$N_BACKBONES" ) 2>&1 \
-      | tee "$LOGS_DIR/exp9_dbrfd3_${stage}.log" || warn "$stage 运行异常"
-  record_run exp9_wetlab_insilico "dbrfd3_${stage}" "$N_BACKBONES"
+  add_job "$DEST/dbrfd3/$stage" "$spec" "dbrfd3_${stage}" "$stage"
 done
 
 # ------------------------------------------- (b) 半胱氨酸水解酶 motif ---
@@ -113,20 +121,24 @@ case = {
 common.write_spec(out / "exp9_cys_hydrolase.json", common.spec_enzyme([case]))
 print("半胱氨酸水解酶规格已写好")
 PY
-  ( time rfd3_design "$DEST/cys_hydrolase/seed_0" \
-      "$INPUTS_DIR/specs/exp9_cys_hydrolase.json" "${N_DESIGNS_CYS:-190}" ) 2>&1 \
-      | tee "$LOGS_DIR/exp9_cys_hydrolase.log" || warn "运行异常"
-  record_run exp9_wetlab_insilico "cys_hydrolase" "${N_DESIGNS_CYS:-190}"
+  add_job "$DEST/cys_hydrolase/seed_0" "$INPUTS_DIR/specs/exp9_cys_hydrolase.json" \
+          "cys_hydrolase" "论文筛了 190 个设计" "${N_DESIGNS_CYS:-190}"
 fi
 
+hdr "实验 9：提交任务到 GPU 池"
+run_on_gpus "$MAX_PARALLEL_GPUS" < "$JOBS" \
+  || warn "部分任务失败（日志见 $LOGS_DIR/gpu_pool/）"
+
 if [[ "${WITH_SEQ:-1}" == "1" ]]; then
-  hdr "实验 9：序列设计"
+  hdr "实验 9：序列设计（${N_WORKERS} 进程并行）"
   "$PY" 50_sequence_design.py --experiment exp9_wetlab_insilico \
-        --model ligand_mpnn --n-seqs "$LIGAND_MPNN_SEQS" || warn "序列设计失败"
+        --model ligand_mpnn --n-seqs "$LIGAND_MPNN_SEQS" --workers "$N_WORKERS" \
+        || warn "序列设计失败"
 fi
 if [[ "${WITH_FOLD:-1}" == "1" ]]; then
   hdr "实验 9：结构预测（motif 全原子 RMSD 的粗筛）"
-  "$PY" 60_fold.py --experiment exp9_wetlab_insilico || warn "折叠失败"
+  "$PY" 60_fold.py --experiment exp9_wetlab_insilico \
+        --parallel "$FOLD_PARALLEL_GPUS" || warn "折叠失败"
 fi
 
 hdr "实验 9 完成"

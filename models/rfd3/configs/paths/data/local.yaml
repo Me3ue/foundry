@@ -1,16 +1,16 @@
 # Local paths for user finetuning with personal mirrors and datasets.
 
-pdb_data_dir: /media/zzj/Data/pdb_mirror
-pdb_parquet_dir: /home/zzj/protein/foundry/data/rfd3_finetune/metadata
-cif_cache_dir: /media/zzj/Data/pdb_mirror
+pdb_data_dir: /dev/shm/pdb_mirror
+pdb_parquet_dir: /dev/shm/pdb_metadata_latest
+cif_cache_dir: /dev/shm/pdb_mirror
 
 monomer_distillation_data_dir: /squash/af2_distillation_facebook/
 monomer_distillation_parquet_dir: /projects/ml/datahub/dfs/distillation/af2_distillation_facebook
 
 failed_examples_dir: null
 
-design_benchmark_data_dir: /home/zzj/protein/foundry/data/rfd3_finetune
+design_benchmark_data_dir: /home/zhangzijian/protein/foundry/data/rfd3_finetune
 
-design_model_weight_dir: /home/zzj/protein/foundry/data/rfd3_finetune/weights
+design_model_weight_dir: /home/zhangzijian/protein/foundry/data/rfd3_finetune/weights
 
 residue_cache_dir: /net/tukwila/lschaaf/datahub/MACE-Egret-3-noH/mace_embeddings

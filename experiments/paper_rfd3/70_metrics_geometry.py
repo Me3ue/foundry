@@ -16,7 +16,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -399,16 +401,50 @@ def dispatch(experiment: str, design: Path, fold: Path | None,
     return {"status": "not_applicable"}
 
 
+def score_one(exp: str, cond: str, design: Path) -> dict:
+    """算一个设计的全部几何指标（供进程池调用）。"""
+    stem = design.name.split(".")[0]
+    folds = find_folds(common.FOLDS_DIR / exp / cond, stem)
+    if folds:
+        res = aggregate([dispatch(exp, design, f, cond) for f in folds])
+    else:
+        res = dispatch(exp, design, None, cond)
+    row = {k: "" for k in FIELDS}
+    row.update({"experiment": exp, "condition": cond, "design": stem,
+                "fold": f"{len(folds)} folds" if folds else ""})
+    for k, v in res.items():
+        if k in row:
+            row[k] = "" if v is None else v
+    return row
+
+
+def _score_task(task):
+    """进程池的入口（参数必须可 pickle）。"""
+    exp, cond, design = task
+    try:
+        return score_one(exp, cond, design)
+    except Exception as exc:  # noqa: BLE001
+        row = {k: "" for k in FIELDS}
+        row.update({"experiment": exp, "condition": cond,
+                    "design": design.name.split(".")[0],
+                    "status": f"worker_error: {type(exc).__name__}: {exc}"})
+        return row
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="计算论文几何指标")
     ap.add_argument("--experiment", nargs="*", default=None)
     ap.add_argument("--limit", type=int, default=0, help="每个条件最多算多少条")
+    ap.add_argument("--workers", type=int,
+                    default=int(os.environ.get("N_WORKERS", "8")),
+                    help="并行进程数（解析 CIF / 算 SASA 都是 CPU 活）")
     args = ap.parse_args()
 
     common.ensure_dirs()
     out_path = common.METRICS_DIR / "geometry.csv"
     rows: list[dict] = []
 
+    tasks: list[tuple[str, str, Path]] = []
     if common.DESIGNS_DIR.exists():
         for exp_dir in sorted(p for p in common.DESIGNS_DIR.iterdir() if p.is_dir()):
             exp = exp_dir.name
@@ -422,22 +458,14 @@ def main() -> int:
                 if not designs:
                     continue
                 print(f"[{exp}/{cond}] {len(designs)} 个设计")
-                for design in designs:
-                    stem = design.name.split(".")[0]
-                    folds = find_folds(common.FOLDS_DIR / exp / cond, stem)
-                    if folds:
-                        res = aggregate([dispatch(exp, design, f, cond)
-                                         for f in folds])
-                    else:
-                        res = dispatch(exp, design, None, cond)
-                    row = {k: "" for k in FIELDS}
-                    row.update({"experiment": exp, "condition": cond,
-                                "design": stem,
-                                "fold": f"{len(folds)} folds" if folds else ""})
-                    for k, v in res.items():
-                        if k in row:
-                            row[k] = "" if v is None else v
-                    rows.append(row)
+                tasks.extend((exp, cond, d) for d in designs)
+
+    if tasks:
+        workers = max(1, args.workers)
+        print(f"\n共 {len(tasks)} 个设计待打分，用 {workers} 个进程并行\n")
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            for row in pool.map(_score_task, tasks, chunksize=4):
+                rows.append(row)
 
     with out_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=FIELDS)

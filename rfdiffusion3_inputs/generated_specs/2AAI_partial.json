@@ -1,6 +1,6 @@
 {
   "2AAI": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/2AAI_A.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/2AAI_A.pdb",
     "partial_t": 6.0,
     "select_unfixed_sequence": "A1-43,A223-267",
     "dialect": 2,

@@ -4,9 +4,9 @@
 # Each final model has noisy and denoised CIF trajectories.
 set -Eeuo pipefail
 
-ROOT="${ROOT:-/home/zzj/protein/foundry}"
-CKPT="${CKPT:-/media/zzj/Data/rfd3_latest.ckpt}"
-HBPLUS="${HBPLUS:-/home/zzj/protein/HBPLUS/hbplus/hbplus}"
+ROOT="${ROOT:-/home/zhangzijian/protein/foundry}"
+CKPT="${CKPT:-/dev/shm/rfd3_latest.ckpt}"
+HBPLUS="${HBPLUS:-/home/zhangzijian/protein/HBPLUS/hbplus/hbplus}"
 OUT_ROOT="${OUT_ROOT:-${ROOT}/logs/rfd3_paper_matrix}"
 PDB_DIR="${PDB_DIR:-${ROOT}/inputs/pdb}"
 PYTHON="${PYTHON:-python}"

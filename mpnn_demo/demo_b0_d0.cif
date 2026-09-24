@@ -2210,7 +2210,7 @@ ATOM C C   . GLY B 1 267 . 267 GLY B C   19.7  1.0 ? 0.1 51.684 14.114  25.549 1
 ATOM O O   . GLY B 1 267 . 267 GLY B O   25.78 1.0 ? 0.1 50.49  14.384  25.28  1 2073
 ATOM O OXT . GLY B 1 267 . 267 GLY B OXT 19.14 1.0 ? 0.1 52.366 13.283  24.926 1 2074
 #
-_mpnn_input.structure_path                                    /home/zzj/protein/foundry/clean_pdb/1ABR.pdb
+_mpnn_input.structure_path                                    /home/zhangzijian/protein/foundry/clean_pdb/1ABR.pdb
 _mpnn_input.name                                              demo
 _mpnn_input.seed                                              null
 _mpnn_input.batch_size                                        1
@@ -2249,6 +2249,6 @@ _mpnn_output.designed_sequence                    SENNIEFSVENATAEKYLAFIDKLRERLVG
 _mpnn_output.sequence_recovery                    0.47297295928001404
 _mpnn_output.ligand_interface_sequence_recovery   null
 _mpnn_output.model_type                           protein_mpnn
-_mpnn_output.checkpoint_path                      /home/zzj/protein/foundry/models/mpnn/proteinmpnn_v_48_002.pt
+_mpnn_output.checkpoint_path                      /home/zhangzijian/protein/foundry/models/mpnn/proteinmpnn_v_48_002.pt
 _mpnn_output.is_legacy_weights                    True
 #

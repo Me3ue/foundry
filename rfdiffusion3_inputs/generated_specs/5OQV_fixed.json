@@ -1,6 +1,6 @@
 {
   "5OQV": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/5OQV_A.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/5OQV_A.pdb",
     "select_fixed_atoms": {
       "A8": "BKBN",
       "A9": "BKBN",

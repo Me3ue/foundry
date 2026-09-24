@@ -1,6 +1,6 @@
 {
   "1DM0": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/1DM0_A.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/1DM0_A.pdb",
     "partial_t": 9.0,
     "select_unfixed_sequence": "A1-19,A240-242,A257-264",
     "dialect": 2,

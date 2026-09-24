@@ -1,6 +1,6 @@
 {
   "6A6B": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/6A6B_A.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/6A6B_A.pdb",
     "partial_t": 9.0,
     "select_unfixed_sequence": "A56-63",
     "dialect": 2,

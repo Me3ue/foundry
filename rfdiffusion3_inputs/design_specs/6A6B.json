@@ -1,6 +1,6 @@
 {
   "6A6B": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/6A6B_A.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/6A6B_A.pdb",
     "select_fixed_atoms": {
       "A37": "BKBN",
       "A38": "BKBN",

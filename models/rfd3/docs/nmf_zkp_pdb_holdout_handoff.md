@@ -30,8 +30,8 @@ sweep 脚本会跑：
 
 - 仓库：`/root/protein/foundry`
 - 环境：`/opt/conda/envs/rc`
-- PDB mirror：`/media/zzj/Data/pdb_mirror`
-- parquet / ckpt：`/media/zzj/Data/pdb_metadata_latest`
+- PDB mirror：`/dev/shm/pdb_mirror`
+- parquet / ckpt：`/dev/shm/pdb_metadata_latest`
 - 日志根目录：`/root/protein/foundry/logs/train_nmf_zkp_pdb`
 - 最近一次失败 sweep：`sweep_nmf_zkp_pdb_2026-09-10_18-57-38`
 - 训练预算：`crop_size=256`，`max_atoms_in_crop=1920`，`diffusion_batch_size_train=4`，GPU 约 80GB
@@ -216,8 +216,8 @@ N_EXAMPLES=128 MAX_EPOCHS=575 INCLUDE_BASELINE=1 INCLUDE_ALL=0 \
 ```bash
 python models/rfd3/scripts/preflight_nmf_pdb_transforms.py \
   --experiment nmf_zkp_pdb \
-  --data-dir /media/zzj/Data/pdb_metadata_latest \
-  --pdb-mirror /media/zzj/Data/pdb_mirror \
+  --data-dir /dev/shm/pdb_metadata_latest \
+  --pdb-mirror /dev/shm/pdb_mirror \
   --output logs/pdb_transform_preflight.csv \
   --write-filter models/rfd3/configs/datasets/val/pdb_holdout.yaml
 ```

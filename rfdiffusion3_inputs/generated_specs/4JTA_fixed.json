@@ -1,6 +1,6 @@
 {
   "4JTA": {
-    "input": "/home/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/4JTA_B.pdb",
+    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/4JTA_B.pdb",
     "select_fixed_atoms": {
       "B32": "BKBN",
       "B33": "BKBN",

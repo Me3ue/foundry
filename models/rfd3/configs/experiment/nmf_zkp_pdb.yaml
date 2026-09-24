@@ -3,8 +3,8 @@
 #
 # Launch example:
 #   python models/rfd3/src/rfd3/train_lora.py experiment=nmf_zkp_encoder_pdb \
-#     paths.data.pdb_data_dir=/media/zzj/Data/pdb_mirror \
-#     paths.data.pdb_parquet_dir=/media/zzj/Data/pdb_metadata_latest \
+#     paths.data.pdb_data_dir=/dev/shm/pdb_mirror \
+#     paths.data.pdb_parquet_dir=/dev/shm/pdb_metadata_latest \
 #     paths.log_dir=$PWD/logs/train_nmf_zkp_pdb
 #
 # Verify the resolved config before a long run:
@@ -16,8 +16,12 @@ defaults:
 
 name: nmf-zkp-pdb
 
+# This sweep keeps metrics, reports, and replacement metadata, but does not
+# write trained model checkpoints. The input checkpoint is still loaded.
+save_checkpoints: false
+
 ckpt_config:
-  path: /media/zzj/Data/pdb_metadata_latest/rfd3_latest.ckpt
+  path: /dev/shm/pdb_metadata_latest/rfd3_latest.ckpt
   reset_optimizer: true
 
 datasets:
@@ -91,6 +95,8 @@ trainer:
   # Validation is produced explicitly after fit by train_lora.py. Periodic
   # validation remains disabled here to avoid duplicate expensive holdout runs.
   validate_every_n_epochs: 1000000
-  checkpoint_every_n_epochs: 10
+  # Keep this above max_epochs; train_lora.py also checks save_checkpoints
+  # before its final post-fit save.
+  checkpoint_every_n_epochs: 1000000000
   grad_accum_steps: 1
   max_epochs: 5

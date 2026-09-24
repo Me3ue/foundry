@@ -9,10 +9,12 @@
 #   * Fig. S1c 扫描 step scale η，观察 可设计性 ↑ / 多样性 ↓ 的权衡，
 #     论文最终选定 η = 1.5
 #
+# 多卡：4 个 η 值直接铺到 4 张空闲卡上同时跑（A6000 48 GB 跑 L≤200 的批次很轻松）。
+#
 # 运行：
 #   ./10_exp1_unconditional.sh
-#   SCALE=paper ./10_exp1_unconditional.sh          # 论文规模
-#   ETAS="1.0 1.5 2.0 3.0" ./10_exp1_unconditional.sh
+#   SCALE=paper ./10_exp1_unconditional.sh              # 论文规模
+#   ETAS="1.0 1.5 2.0 3.0" GPUS=2,4 ./10_exp1_unconditional.sh
 # =============================================================================
 set -Eeuo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -23,28 +25,35 @@ hdr "实验 1：无条件生成（§3 / Fig. S1c）"
 SPEC="$INPUTS_DIR/specs/exp1_unconditional.json"
 [[ -f "$SPEC" ]] || die "缺少 $SPEC，请先运行 python 01_prepare_inputs.py"
 DEST="$DESIGNS_DIR/exp1_unconditional"
-
 ETAS="${ETAS:-1.0 1.5 2.0 3.0}"
-for eta in $ETAS; do
-  for seed in $SEEDS; do
-    run_dir="$DEST/eta_${eta}/seed_${seed}"
-    log="$LOGS_DIR/exp1_eta_${eta}_seed${seed}.log"
-    log "η=$eta  seed=$seed  骨架数=$N_BACKBONES"
-    ( time rfd3_design "$run_dir" "$SPEC" "$N_BACKBONES" \
-        inference_sampler.step_scale="$eta" seed="$seed" ) 2>&1 | tee "$log" || warn "η=$eta 运行异常"
-    record_run exp1_unconditional "eta_${eta}" "$N_BACKBONES" "seed=$seed"
-  done
-done
 
-# ---- 可选：序列设计 + 自洽性折叠 ----
+# 每个 (η, seed) 一个任务 -> 铺到多张卡
+build_jobs() {
+  local eta seed
+  for eta in $ETAS; do
+    for seed in $SEEDS; do
+      rfd3_design_cmd "$DEST/eta_${eta}/seed_${seed}" "$SPEC" "$N_BACKBONES" \
+        "inference_sampler.step_scale=$eta" "seed=$seed"
+      printf '\n'
+      record_run exp1_unconditional "eta_${eta}" "$N_BACKBONES" "seed=$seed"
+    done
+  done
+}
+
+build_jobs | run_on_gpus "$MAX_PARALLEL_GPUS" \
+  || warn "部分任务失败（日志见 $LOGS_DIR/gpu_pool/）"
+
+# ---- 序列设计 + 自洽性折叠 ----
 if [[ "${WITH_SEQ:-1}" == "1" ]]; then
-  hdr "实验 1：ProteinMPNN 序列设计"
+  hdr "实验 1：ProteinMPNN 序列设计（${N_WORKERS} 进程并行）"
   "$PY" 50_sequence_design.py --experiment exp1_unconditional \
-        --model protein_mpnn --n-seqs "$MPNN_SEQS" || warn "序列设计失败"
+        --model protein_mpnn --n-seqs "$MPNN_SEQS" --workers "$N_WORKERS" \
+        || warn "序列设计失败"
 fi
 if [[ "${WITH_FOLD:-1}" == "1" ]]; then
-  hdr "实验 1：结构预测（自洽性）"
-  "$PY" 60_fold.py --experiment exp1_unconditional || warn "折叠失败"
+  hdr "实验 1：结构预测（自洽性，最多并行 $FOLD_PARALLEL_GPUS 卡）"
+  "$PY" 60_fold.py --experiment exp1_unconditional \
+        --parallel "$FOLD_PARALLEL_GPUS" || warn "折叠失败"
 fi
 
 hdr "实验 1 完成"

@@ -7,7 +7,7 @@ defaults:
 name: lora-head-only-pdb
 
 ckpt_config:
-  path: /media/zzj/Data/pdb_metadata_latest/rfd3_latest.ckpt
+  path: /dev/shm/pdb_metadata_latest/rfd3_latest.ckpt
   reset_optimizer: true
   parameter_freezing_config:
     freeze_by_default: true

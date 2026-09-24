@@ -4,10 +4,10 @@
 
 | 项目 | 值 |
 |---|---|
-| 仓库根 | `/home/zzj/protein/foundry`（Foundry：atomworks + RFD3 + RF3 + MPNN） |
-| 运行环境 | conda env `rc` → `/home/zzj/anaconda3/envs/rc/bin/{rfd3,mpnn,rf3,rfd3na,foundry}` |
+| 仓库根 | `/home/zhangzijian/protein/foundry`（Foundry：atomworks + RFD3 + RF3 + MPNN） |
+| 运行环境 | conda env `rc` → `/home/zhangzijian/anaconda3/envs/rc/bin/{rfd3,mpnn,rf3,rfd3na,foundry}` |
 | RFD3 权重 | `/media/zzj/Data/rfd3_latest.ckpt` |
-| HBPLUS | `/home/zzj/protein/HBPLUS/hbplus/hbplus`（已写进 `foundry/.env` 的 `HBPLUS_PATH`） |
+| HBPLUS | `/home/zhangzijian/protein/HBPLUS/hbplus/hbplus`（已写进 `foundry/.env` 的 `HBPLUS_PATH`） |
 | TMalign | `/usr/bin/TMalign` |
 | GPU | 单卡约 11.5 GiB；显存紧张，长跑前先 `SAMPLES=1` 试水 |
 

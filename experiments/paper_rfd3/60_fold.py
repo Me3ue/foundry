@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import common  # noqa: E402
 
-RC_ENV_BIN = Path(os.environ.get("RC_ENV_BIN", "/home/zzj/anaconda3/envs/rc/bin"))
+RC_ENV_BIN = Path(os.environ.get("RC_ENV_BIN", "/home/zhangzijian/anaconda3/envs/rc/bin"))
 RF3 = RC_ENV_BIN / "rf3"
 RF3_CKPT = os.environ.get(
     "RF3_CKPT",
@@ -155,6 +155,11 @@ def main() -> int:
     ap.add_argument("--experiment", nargs="*", default=None)
     ap.add_argument("--limit", type=int, default=0, help="每个条件最多折叠多少条序列")
     ap.add_argument("--backend", default=os.environ.get("FOLD_BACKEND", "rf3"))
+    ap.add_argument("--shards", type=int,
+                    default=int(os.environ.get("FOLD_SHARDS", "6")),
+                    help="把折叠任务拆成几片（≈ 用几张卡）")
+    ap.add_argument("--parallel", default=os.environ.get("FOLD_PARALLEL_GPUS", "auto"),
+                    help="GPU 池并行度；auto = 按空闲显存决定")
     args = ap.parse_args()
 
     backend = args.backend
@@ -163,6 +168,7 @@ def main() -> int:
         if common.SEQS_DIR.exists() else [])
     targets = load_targets()
     written = 0
+    jobs: list[str] = []
 
     for exp in experiments:
         exp_seq_dir = common.SEQS_DIR / exp
@@ -195,21 +201,45 @@ def main() -> int:
             written += 1
             print(f"[{exp}/{cond_dir.name}] {len(payload)} 条序列 -> {spec_path}")
 
-            if backend == "rf3":
-                if not RF3.exists():
-                    print(f"  [skip] 找不到 rf3 可执行文件 {RF3}")
-                    continue
-                cmd = [str(RF3), "fold", f"inputs={spec_path}", f"out_dir={out_dir}"]
-                if Path(RF3_CKPT).exists():
-                    cmd.append(f"ckpt_path={RF3_CKPT}")
-                proc = subprocess.run(cmd)
-                if proc.returncode != 0:
-                    print(f"  [!] rf3 fold 返回 {proc.returncode}")
-            else:
+            if backend != "rf3":
                 print(f"  backend={backend}：仅生成输入文件，请交给 {backend} 运行")
+                continue
+            if not RF3.exists():
+                print(f"  [skip] 找不到 rf3 可执行文件 {RF3}")
+                continue
 
-    print(f"\n共写出 {written} 个折叠输入文件")
-    return 0
+            # 分片：把一次大 fold 拆成 N 份，铺到 N 张卡上同时跑。
+            # RF3 自己也能多卡分流，但显式分片更可控、日志也更清楚。
+            n_shards = max(1, min(args.shards, len(payload)))
+            for i in range(n_shards):
+                chunk = payload[i::n_shards]
+                shard_path = out_dir / f"fold_inputs_shard{i}.json"
+                shard_path.write_text(json.dumps(chunk, indent=2), encoding="utf-8")
+                ckpt_part = f" ckpt_path={RF3_CKPT}" if Path(RF3_CKPT).exists() else ""
+                jobs.append(f'"{RF3}" fold inputs={shard_path} out_dir={out_dir}'
+                            f"{ckpt_part}")
+
+    print(f"\n共写出 {written} 个折叠输入文件，{len(jobs)} 个折叠任务")
+    if not jobs:
+        return 0
+
+    pool = common.PAPER_ROOT / "lib" / "gpu_pool.py"
+    if not pool.exists():
+        print("找不到 lib/gpu_pool.py，改为串行执行：")
+        for job in jobs:
+            subprocess.run(job, shell=True, cwd=str(common.PAPER_ROOT))
+        return 0
+
+    env = dict(os.environ)
+    cmd = [sys.executable, str(pool), "--jobs-file", "-",
+           "--min-free-mem", env.get("FOLD_MIN_FREE_MEM", "20000"),
+           "--job-mem", env.get("FOLD_JOB_MEM", "20000")]
+    if args.parallel and args.parallel != "auto":
+        cmd += ["--parallel", str(args.parallel)]
+    print(f"提交折叠任务到 GPU 池（shards={args.shards}，parallel={args.parallel}）")
+    proc = subprocess.run(cmd, input="\n".join(jobs), text=True,
+                          cwd=str(common.PAPER_ROOT), env=env)
+    return proc.returncode
 
 
 def _design_key(stem: str, spec: dict) -> str:

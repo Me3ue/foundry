@@ -3,8 +3,8 @@
 #
 # Launch example:
 #   python models/rfd3/src/rfd3/train.py experiment=lora_finetune_pdb \
-#     paths.data.pdb_data_dir=/media/zzj/Data/pdb_mirror \
-#     paths.data.pdb_parquet_dir=/media/zzj/Data/pdb_metadata_latest \
+#     paths.data.pdb_data_dir=/dev/shm/pdb_mirror \
+#     paths.data.pdb_parquet_dir=/dev/shm/pdb_metadata_latest \
 #     paths.log_dir=$PWD/logs
 #
 # Verify the resolved config before a long run:
@@ -31,7 +31,7 @@ lora:
     - fc1
     - fc2
 
-ckpt_path: /media/zzj/Data/pdb_metadata_latest/rfd3_latest.ckpt
+ckpt_path: /dev/shm/pdb_metadata_latest/rfd3_latest.ckpt
 
 datasets:
   diffusion_batch_size_train: 2
