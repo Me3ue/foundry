@@ -1,0 +1,199 @@
+{
+  "insulinr": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/insulinr.pdb",
+    "contig": "100-100,/0,B1-150",
+    "length": "250-250",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B59": "CG,CZ",
+      "B83": "CG,CZ",
+      "B91": "CG,CZ"
+    },
+    "select_hbond_donor": {
+      "B113": "NH1,NH2",
+      "B116": "NZ",
+      "B139": "NE2"
+    },
+    "select_hbond_acceptor": {
+      "B115": "OE2",
+      "B139": "ND1"
+    }
+  },
+  "pdl1": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/pdl1.pdb",
+    "contig": "100-100,/0,B1-115",
+    "length": "215-215",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B40": "CZ",
+      "B99": "CG,SD",
+      "B107": "CZ"
+    },
+    "select_hbond_donor": {
+      "B107": "OH",
+      "B109": "NH1,NH2"
+    },
+    "select_hbond_acceptor": {
+      "B40": "OH",
+      "B107": "OH"
+    }
+  },
+  "vegfr": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/vegfr.pdb",
+    "contig": "100-100,/0,B1-200",
+    "length": "300-300",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B13": "CG1,CG2",
+      "B15": "CZ",
+      "B43": "CZ",
+      "B75": "CG,SD",
+      "B89": "CD1,CG2",
+      "B91": "CG1,CG2",
+      "B187": "CG,CD1"
+    },
+    "select_hbond_donor": {
+      "B15": "OH",
+      "B43": "OH"
+    },
+    "select_hbond_acceptor": {
+      "B9": "OD1,OD2",
+      "B15": "OH",
+      "B43": "OH"
+    }
+  },
+  "rbd": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/rbd.pdb",
+    "contig": "100-100,/0,B1-195",
+    "length": "295-295",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B89": "CZ",
+      "B121": "CZ",
+      "B123": "CG,CD1",
+      "B124": "CG,CZ",
+      "B141": "CZ",
+      "B157": "CZ",
+      "B163": "CZ",
+      "B165": "CG,CZ",
+      "B173": "CZ"
+    },
+    "select_hbond_donor": {
+      "B89": "OH",
+      "B121": "OH",
+      "B141": "OH"
+    },
+    "select_hbond_acceptor": {
+      "B157": "OH",
+      "B163": "OH",
+      "B173": "OH"
+    }
+  },
+  "cd28": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/cd28.pdb",
+    "contig": "100-100,/0,B1-118",
+    "length": "218-218",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B51": "CZ",
+      "B61": "CZ",
+      "B99": "CG,SD",
+      "B104": "CZ"
+    },
+    "select_hbond_donor": {
+      "B51": "OH",
+      "B61": "OH",
+      "B104": "OH"
+    },
+    "select_hbond_acceptor": {
+      "B51": "OH",
+      "B61": "OH",
+      "B104": "OH"
+    }
+  },
+  "il2ra": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/il2ra.pdb",
+    "contig": "100-100,/0,B1-122",
+    "length": "222-222",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B3": "CG,CD1",
+      "B26": "CG,SD",
+      "B43": "CG,CD1",
+      "B44": "CZ",
+      "B46": "CG,CD1"
+    },
+    "select_hbond_donor": {
+      "B44": "OH"
+    },
+    "select_hbond_acceptor": {
+      "B44": "OH",
+      "B77": "ND1",
+      "B2": "OE1,OE2"
+    }
+  },
+  "il10ra": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/il10ra.pdb",
+    "contig": "100-100,/0,B1-207",
+    "length": "307-307",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B39": "CG,CD1",
+      "B50": "CD1,CG2",
+      "B59": "CZ",
+      "B63": "CA,CB",
+      "B64": "CG1,CG2",
+      "B66": "CG,CD1"
+    },
+    "select_hbond_donor": {
+      "B48": "ND2",
+      "B59": "OH"
+    },
+    "select_hbond_acceptor": {
+      "B48": "OD1",
+      "B59": "OH"
+    }
+  },
+  "tie2": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/tie2.pdb",
+    "contig": "100-100,/0,B1-188",
+    "length": "288-288",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B132": "CG1,CG2",
+      "B134": "CZ",
+      "B135": "CD",
+      "B139": "CG,CZ",
+      "B140": "CD1,CG2",
+      "B154": "CG1,CG2",
+      "B156": "CG,CD1",
+      "B167": "CZ",
+      "B172": "CD1,CG2"
+    },
+    "select_hbond_donor": {
+      "B134": "OH",
+      "B135": "NZ",
+      "B167": "OH"
+    },
+    "select_hbond_acceptor": {
+      "B134": "OH",
+      "B167": "OH"
+    }
+  }
+}

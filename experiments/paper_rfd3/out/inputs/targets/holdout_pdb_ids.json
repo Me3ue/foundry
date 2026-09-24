@@ -1,0 +1,25 @@
+{
+  "excluded_pdb_ids": [
+    "7rte",
+    "7m5w",
+    "7n5u",
+    "3di3",
+    "5o45",
+    "1z92",
+    "2gy5",
+    "4zxb"
+  ],
+  "cutoff": "2024-12-16",
+  "source": [
+    "models/rfd3/configs/datasets/train/pdb/rfd3_train_interface.yaml",
+    "models/rfd3/configs/datasets/train/pdb/rfd3_train_pn_unit.yaml"
+  ],
+  "paper_ppi_targets": {
+    "pdl1": "5o45",
+    "insulinr": "4zxb",
+    "tie2": "2gy5",
+    "il2ra": "1z92",
+    "il7ra": "3di3"
+  },
+  "_说明": "这些 PDB ID 被显式排除在训练之外，因此是论文的 held-out 评测靶点。DNA 靶点（7rte/7n5u/7m5w）与 PPI 靶点共用同一份排除清单。"
+}

@@ -1,0 +1,128 @@
+{
+  "insulinr": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/insulinr.pdb",
+    "contig": "100-100,/0,B1-150",
+    "length": "250-250",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B59": "CG,CZ",
+      "B83": "CG,CZ",
+      "B91": "CG,CZ"
+    }
+  },
+  "pdl1": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/pdl1.pdb",
+    "contig": "100-100,/0,B1-115",
+    "length": "215-215",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B40": "CG,CZ",
+      "B99": "CG,SD",
+      "B107": "CG,CZ"
+    }
+  },
+  "vegfr": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/vegfr.pdb",
+    "contig": "100-100,/0,B1-200",
+    "length": "300-300",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B13": "CG1,CG2",
+      "B15": "CG,CZ",
+      "B43": "CG,CZ",
+      "B75": "CG,SD",
+      "B89": "CD1,CG2",
+      "B91": "CG1,CG2",
+      "B187": "CG,CD1"
+    }
+  },
+  "rbd": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/rbd.pdb",
+    "contig": "100-100,/0,B1-195",
+    "length": "295-295",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B89": "CG,CZ",
+      "B121": "CG,CZ",
+      "B123": "CG,CD1",
+      "B124": "CG,CZ",
+      "B141": "CG,CZ",
+      "B157": "CG,CZ",
+      "B163": "CG,CZ",
+      "B165": "CG,CZ",
+      "B173": "CG,CZ"
+    }
+  },
+  "cd28": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/cd28.pdb",
+    "contig": "100-100,/0,B1-118",
+    "length": "218-218",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B51": "CG,CZ",
+      "B61": "CG,CZ",
+      "B99": "CG,SD",
+      "B104": "CG,CZ"
+    }
+  },
+  "il2ra": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/il2ra.pdb",
+    "contig": "100-100,/0,B1-122",
+    "length": "222-222",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B3": "CG,CD1",
+      "B26": "CG,SD",
+      "B43": "CG,CD1",
+      "B44": "CG,CZ",
+      "B46": "CG,CD1"
+    }
+  },
+  "il10ra": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/il10ra.pdb",
+    "contig": "100-100,/0,B1-207",
+    "length": "307-307",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B39": "CG,CD1",
+      "B50": "CD1,CG2",
+      "B59": "CG,CZ",
+      "B63": "CA,CB",
+      "B64": "CG1,CG2",
+      "B66": "CG,CD1"
+    }
+  },
+  "tie2": {
+    "dialect": 2,
+    "infer_ori_strategy": "hotspots",
+    "input": "/home/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/tie2.pdb",
+    "contig": "100-100,/0,B1-188",
+    "length": "288-288",
+    "redesign_motif_sidechains": false,
+    "select_hotspots": {
+      "B132": "CG1,CG2",
+      "B134": "CG,CZ",
+      "B135": "CG,CD",
+      "B139": "CG,CZ",
+      "B140": "CD1,CG2",
+      "B154": "CG1,CG2",
+      "B156": "CG,CD1",
+      "B167": "CG,CZ",
+      "B172": "CD1,CG2"
+    }
+  }
+}
