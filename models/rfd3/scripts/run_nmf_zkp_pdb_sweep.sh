@@ -81,16 +81,37 @@ GPU="${GPU:-2}"
 export CUDA_VISIBLE_DEVICES="${GPU}"
 LOG_ROOT="${LOG_ROOT:-/backup01/zzj/logs/train_nmf_zkp_pdb}"
 CKPT="${CKPT:-/dev/shm/pdb_metadata_latest/rfd3_latest.ckpt}"
-# Prefer the project rc environment when PYTHON is not explicitly supplied.
-# The system/base Python may resolve to a different site-packages tree and can
-# silently hide a broken dependency installation.
+# Pick an interpreter that can actually import the stack, instead of trusting a
+# single hard-coded conda path. PYTHONPATH is already exported above, so a
+# candidate only needs pandas + torch installed. Explicit PYTHON always wins.
 if [[ -z "${PYTHON+x}" ]]; then
-  if [[ -x "/opt/conda/envs/rc/bin/python" ]]; then
-    PYTHON="/opt/conda/envs/rc/bin/python"
-  else
+  python_candidates=(
+    "${RC_PYTHON:-}"
+    "/backup01/zzj/rc-cu128/bin/python"
+    "${HOME:-/home/zzj}/anaconda3/envs/rc/bin/python"
+    "/opt/conda/envs/rc/bin/python"
+    "$(command -v python 2>/dev/null)"
+  )
+  python_rejected=()
+  for _candidate in "${python_candidates[@]}"; do
+    [[ -n "${_candidate}" && -x "${_candidate}" ]] || continue
+    if "${_candidate}" -c 'import pandas, foundry, rfd3' >/dev/null 2>&1; then
+      PYTHON="${_candidate}"
+      break
+    fi
+    python_rejected+=("${_candidate}")
+  done
+  if [[ -z "${PYTHON:-}" ]]; then
+    # Nothing usable found: fall back to the active interpreter so the
+    # preflight below prints the real import error for the user to see.
     PYTHON="python"
+    echo "WARNING: no candidate interpreter could import pandas/foundry/rfd3." >&2
+    echo "         tried: ${python_rejected[*]:-<none>}" >&2
+    echo "         falling back to '${PYTHON}' (from PATH: $(command -v python || echo none))." >&2
+    echo "         Set PYTHON=/path/to/rc-env/bin/python (or RC_PYTHON=...) to override." >&2
   fi
 fi
+echo "Using PYTHON=${PYTHON}"
 
 # Validate all external inputs before launching the multi-job sweep. This avoids
 # wasting hours when a parquet, checkpoint, PDB mirror, or CCD mirror is missing.
@@ -119,7 +140,12 @@ print(f"Using rfd3: {rfd3.__file__}")
 PY
 then
   echo "ERROR: Python environment failed the pandas/foundry/rfd3 import check." >&2
-  echo "Repair the environment or rerun with PYTHON=/path/to/python." >&2
+  echo "  interpreter used: ${PYTHON}" >&2
+  echo "  Find the env that has the stack, for example:" >&2
+  echo "    for p in /backup01/zzj/rc-cu128/bin/python \"\$HOME/anaconda3/envs/rc/bin/python\"; do" >&2
+  echo "      \"\$p\" -c 'import pandas, torch, foundry, rfd3' 2>/dev/null && echo \"OK: \$p\"" >&2
+  echo "    done" >&2
+  echo "  Then rerun with PYTHON=/that/python (or export RC_PYTHON=/that/python)." >&2
   exit 1
 fi
 
