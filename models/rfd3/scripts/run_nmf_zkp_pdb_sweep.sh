@@ -43,9 +43,21 @@ PDB_MIRROR="${PDB_MIRROR:-/dev/shm/pdb_mirror}"
 # AtomWorks resolves the chemical component dictionary through this environment variable.
 export CCD_MIRROR_PATH="${CCD_MIRROR_PATH:-/dev/shm/ccd_mirror}"
 export CCD_PATH="${CCD_PATH:-/dev/shm/ccd_mirror}"
-# H-bond featurization (calculate_hbonds=0.2) shells out to HBPLUS. The binary
-# on this machine lives under /root, not the old /home/zhangzijian path baked into env.
-export HBPLUS_PATH="${HBPLUS_PATH:-/root/protein/HBPLUS/hbplus/hbplus}"
+# H-bond featurization (calculate_hbonds > 0) shells out to HBPLUS. Pick the
+# first binary that actually exists instead of trusting a hard-coded path: the
+# checked-in `.env` points at $HOME/protein, while older notes mention /root.
+if [[ -z "${HBPLUS_PATH:-}" ]]; then
+  for _hbplus_candidate in \
+    "${HOME:-/home/zzj}/protein/HBPLUS/hbplus/hbplus" \
+    "/root/protein/HBPLUS/hbplus/hbplus"; do
+    if [[ -x "${_hbplus_candidate}" ]]; then
+      HBPLUS_PATH="${_hbplus_candidate}"
+      break
+    fi
+  done
+  HBPLUS_PATH="${HBPLUS_PATH:-${HOME:-/home/zzj}/protein/HBPLUS/hbplus/hbplus}"
+fi
+export HBPLUS_PATH
 # GPU 2 is currently idle on the supplied machine. Override with GPU=4 if
 # another free A6000 is preferred; do not use busy GPUs 0, 1, 3, or 5.
 GPU="${GPU:-2}"
@@ -127,6 +139,15 @@ COMMON_OVERRIDES=(
   "dataloader.train.dataloader_params.prefetch_factor=${PREFETCH:-2}"
 )
 
+# Escape hatch for extra hydra overrides applied to every job, e.g. a fast
+# evaluation-only smoke test that trains for zero steps and only runs the
+# holdout pass:
+#   MAX_EPOCHS=1 EXTRA_OVERRIDES="datasets.val.pdb_holdout.max_examples=4" ...
+if [[ -n "${EXTRA_OVERRIDES:-}" ]]; then
+  # shellcheck disable=SC2206
+  COMMON_OVERRIDES+=(${EXTRA_OVERRIDES})
+fi
+
 LAYER_SET="${LAYER_SET:-encoder}"
 LAYER="${LAYER:-}"
 
@@ -165,6 +186,14 @@ layer_jobs_for() {
 
 JOBS=()
 if [[ "${INCLUDE_BASELINE}" == "1" ]]; then
+  # NOTE: no NMF/LoRA injection and no parameter_freezing_config is set here, so
+  # every RFD3 parameter (~168M) stays trainable. This baseline is therefore a
+  # FULL FINE-TUNE of the released checkpoint, not a frozen-pretrained baseline.
+  # To evaluate the untouched checkpoint instead, use the zero-step trick
+  # (trainer.max_epochs=1 still runs the post-fit holdout pass) or apply
+  #   EXTRA_OVERRIDES="+ckpt_config.parameter_freezing_config.freeze_by_default=true"
+  # (a fully frozen model yields a loss without grad_fn, so it cannot go through
+  # training_step/backward -- that combination only works with zero train steps).
   JOBS+=("baseline|nmf_zkp_pdb|name=baseline +nmf.enabled=false ckpt_config.path=${CKPT} ckpt_config.reset_optimizer=true")
 fi
 

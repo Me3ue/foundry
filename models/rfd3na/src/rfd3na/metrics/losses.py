@@ -42,8 +42,16 @@ class SequenceLoss(nn.Module):
         sequence_indices_I = sequence_indices_I[valid_t]
         recovery = (sequence_indices_I == gt_seq).float()  # (V, L)
         recovery = recovery[order]  # reorder by t
-        recovery = recovery[..., (w_seq > 0).bool()]  # [V, L_valid]
-        lowest_t_rec = recovery[0].mean()  # scalar
+        if int((w_seq > 0).sum()) == 0:
+            # No supervised position in the crop (all residues unknown);
+            # `mean()` over an empty selection would be NaN.
+            recovery = torch.zeros(
+                n_valid_t, device=sequence_indices_I.device, dtype=recovery.dtype
+            )
+            lowest_t_rec = recovery[0]
+        else:
+            recovery = recovery[..., (w_seq > 0).bool()]  # [V, L_valid]
+            lowest_t_rec = recovery[0].mean()  # scalar
 
         outs = {
             "token_lvl_sequence_loss": token_loss.mean().detach(),
@@ -187,8 +195,16 @@ class DiffusionLoss(nn.Module):
             lddt_loss_dict = {}
             l_total = l_mse_total
         # ... Return additional losses
-        t, indices = torch.sort(t)
-        l_mse_low, l_mse_high = torch.split(l_global[indices], [D // 2, D - D // 2])
+        if D < 2:
+            # A single diffusion sample cannot be split into low/high-t halves;
+            # `torch.split(x, [0, 1])` yields an empty tensor and `mean()` of it
+            # is NaN, which then leaks into the logged metrics.
+            l_mse_low = l_mse_high = l_global
+        else:
+            _, indices = torch.sort(t)
+            l_mse_low, l_mse_high = torch.split(
+                l_global[indices], [D // 2, D - D // 2]
+            )
         loss_dict = {
             "mse_loss_mean": l_mse_total,
             "mse_loss_low_t": l_mse_low,
@@ -292,16 +308,25 @@ def smoothed_lddt_loss(
                 mask = mask.to(pair_mask.dtype)
                 if mask.ndim > 1:
                     mask = mask[0]
-                mask = (mask[first_index] * mask[second_index])[None].expand(
+                selected = (mask[first_index] * mask[second_index])[None].expand(
                     pair_mask.shape[0], -1
                 )
-                mask = (mask * pair_mask).to(bool)
-                return (
-                    (1 - torch.sum(lddt_[:, mask[0]] * scale, dim=(1)))
-                    .mean()
-                    .detach()
-                    .cpu()
+                selected = (selected * pair_mask).to(torch.bool)
+                # ``lddt_`` is normalized by the *total* number of pairs, so a
+                # subset sum is only a fraction of the all-pairs lDDT. That made
+                # every subset column (dna / rna / protein-on-a-complex, i.e.
+                # anything whose pairs are not all pairs) report roughly
+                # ``n_subset_pairs / n_pairs`` times its true value. Renormalize
+                # by the number of selected pairs and report NaN when the subset
+                # is empty (e.g. no DNA in a protein-only structure).
+                n_selected = int(selected[0].sum())
+                if n_selected == 0:
+                    return torch.tensor(float("nan"))
+                n_total = torch.sum(pair_mask[0])
+                subset_lddt = (
+                    torch.sum(lddt_[:, selected[0]], dim=(1)) * n_total / n_selected
                 )
+                return (1 - subset_lddt * scale).mean().detach().cpu()
 
             extra_lddts = {}
             extra_lddts["mean_lddt"] = filter_lddt(

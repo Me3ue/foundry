@@ -20,6 +20,27 @@ COLORS = {
 }
 COLOR_CYCLE = ["#0072B2", "#009E73", "#D55E00", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442"]
 
+# The validation callback logs `val/<dataset>/<metric>.<key>`, where `<metric>`
+# comes from the metrics registry (here `lddt`), so the plain `mean_lddt` key is
+# only a legacy alias. Accept every plausible spelling.
+KEY_ALIASES = {
+    "val/pdb_holdout/mean_lddt": (
+        "val/pdb_holdout/lddt.mean_lddt_protein",
+        "val/pdb_holdout/lddt.mean_lddt",
+        "val/mean_lddt",
+    ),
+}
+
+
+def resolve_key(df: pd.DataFrame, key: str) -> str | None:
+    """Return the first column in `df` that corresponds to the requested key."""
+    if key in df.columns:
+        return key
+    for alias in KEY_ALIASES.get(key, ()):
+        if alias in df.columns:
+            return alias
+    return None
+
 
 def ordered_tags(metrics: dict[str, pd.DataFrame]) -> list[str]:
     discovered = list(metrics)
@@ -124,9 +145,12 @@ def plot_curves(metrics: dict[str, pd.DataFrame], fig_dir: Path) -> list[Path]:
         any_series = False
         for index, tag in enumerate(ordered_tags(metrics)):
             df = metrics.get(tag)
-            if df is None or key not in df.columns:
+            if df is None:
                 continue
-            y = pd.to_numeric(df[key], errors="coerce")
+            column = resolve_key(df, key)
+            if column is None:
+                continue
+            y = pd.to_numeric(df[column], errors="coerce")
             x = pd.to_numeric(df.get("epoch", df.get("step")), errors="coerce")
             mask = y.notna() & x.notna()
             if not mask.any():
@@ -159,9 +183,12 @@ def plot_curves(metrics: dict[str, pd.DataFrame], fig_dir: Path) -> list[Path]:
     for ax, (key, ylabel, higher_better) in zip(axes.ravel(), combo_keys):
         for index, tag in enumerate(ordered_tags(metrics)):
             df = metrics.get(tag)
-            if df is None or key not in df.columns:
+            if df is None:
                 continue
-            y = pd.to_numeric(df[key], errors="coerce")
+            column = resolve_key(df, key)
+            if column is None:
+                continue
+            y = pd.to_numeric(df[column], errors="coerce")
             x = pd.to_numeric(df.get("epoch", df.get("step")), errors="coerce")
             mask = y.notna() & x.notna()
             if not mask.any():
@@ -206,7 +233,12 @@ def write_tables(sweep_dir: Path, metrics: dict[str, pd.DataFrame], ckpt: str) -
                 "best_train_lddt": best_numeric(df, "train/per_epoch_mean_lddt_protein", True),
                 "final_seq_recovery": last_numeric(df, "train/per_epoch_seq_recovery"),
                 "final_mse": last_numeric(df, "train/per_epoch_mse_loss_mean"),
-                "holdout_lddt": last_numeric(df, "val/pdb_holdout/mean_lddt", "val/mean_lddt"),
+                "holdout_lddt": last_numeric(
+                    df,
+                    "val/pdb_holdout/lddt.mean_lddt_protein",
+                    "val/pdb_holdout/mean_lddt",
+                    "val/mean_lddt",
+                ),
             }
         )
     csv_path = sweep_dir / "paper_metrics.csv"

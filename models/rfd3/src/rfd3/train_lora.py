@@ -50,6 +50,23 @@ def _unwrap_model(model):
     return model
 
 
+def _unwrap_for_parameter_count(model):
+    """Unwrap Fabric / EMA wrappers down to the module that owns the weights.
+
+    ``EMA`` keeps a full copy of the model in its ``shadow`` submodule, so
+    counting parameters on the EMA itself reports roughly twice the real model
+    size (and halves the reported trainable fraction).
+    """
+    for _ in range(4):  # fabric wrapper -> EMA -> model
+        if hasattr(model, "module"):
+            model = model.module
+        elif hasattr(model, "shadow") and hasattr(model, "model"):
+            model = model.model
+        else:
+            break
+    return model
+
+
 def _import_lora_utils() -> tuple[Callable, Callable]:
     try:
         from rfd3.lora import inject_lora_into_model, count_trainable_parameters
@@ -295,6 +312,7 @@ def _directory_size_bytes(path: Path | None) -> int | None:
     return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
 
 
+def _get_run_summary_path(cfg: DictConfig, trainer) -> Path:
     log_dir = Path(cfg.paths.log_dir)
     run_name = str(getattr(cfg, "name", "run"))
     global_step = trainer.state.get("global_step", None)
@@ -345,6 +363,82 @@ def _last_float(rows: list[dict[str, str]], *keys: str):
     return last
 
 
+def _preferred_lddt_key(
+    rows: list[dict[str, str]], prefix: str = "val/"
+) -> str | None:
+    """Resolve the logged lDDT column name for the given prefix.
+
+    The validation metrics callback logs ``val/<dataset>/<metric>.<key>`` (for
+    example ``val/pdb_holdout/lddt.mean_lddt_protein``), so the summary must not
+    depend on one hard-coded key. Protein-restricted lDDT is preferred.
+    """
+    if not rows:
+        return None
+    keys = [key for key in rows[-1].keys() if key]
+    if f"{prefix}mean_lddt" in keys:
+        return f"{prefix}mean_lddt"
+    candidates = sorted(
+        (
+            key
+            for key in keys
+            if key.startswith(prefix) and "lddt" in key.lower()
+        ),
+        key=lambda key: (0 if "protein" in key.lower() else 1, key),
+    )
+    return candidates[0] if candidates else None
+
+
+def _mean_lddt_from_validation_csv(path) -> float | None:
+    """Mean per-example holdout lDDT from the validation metrics CSV.
+
+    This file is the authoritative record of the holdout pass, so it is used to
+    backfill the summary independently of logger column naming.
+    """
+    if not path:
+        return None
+    csv_path = Path(path)
+    if not csv_path.exists():
+        return None
+    try:
+        import csv
+
+        with csv_path.open(newline="") as handle:
+            rows = list(csv.DictReader(handle))
+    except Exception:
+        return None
+    if not rows:
+        return None
+
+    # Keep only the most recent validation epoch, if the column is present.
+    def _epoch(row: dict[str, str]) -> float | None:
+        try:
+            return float(row.get("epoch", ""))
+        except (TypeError, ValueError):
+            return None
+
+    epochs = [e for e in (_epoch(row) for row in rows) if e is not None]
+    if epochs:
+        latest = max(epochs)
+        rows = [row for row in rows if _epoch(row) == latest]
+
+    lddt_keys = sorted(
+        (key for key in rows[-1].keys() if key and "lddt" in key.lower()),
+        key=lambda key: (0 if "protein" in key.lower() else 1, key),
+    )
+    if not lddt_keys:
+        return None
+    key = lddt_keys[0]
+    values = []
+    for row in rows:
+        try:
+            values.append(float(row.get(key, "")))
+        except (TypeError, ValueError):
+            continue
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
 def _best_epoch_from_rows(rows: list[dict[str, str]]):
     scored = []
     for row in rows:
@@ -377,7 +471,7 @@ def _write_run_summary(cfg: DictConfig, trainer, extra: dict[str, Any]) -> Path:
     summary_path = _get_run_summary_path(cfg, trainer)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
 
-    model = _unwrap_model(trainer.state["model"])
+    model = _unwrap_for_parameter_count(trainer.state["model"])
     trainable, total = (None, None)
     try:
         trainable, total = (sum(p.numel() for p in model.parameters() if p.requires_grad), sum(p.numel() for p in model.parameters()))
@@ -664,9 +758,15 @@ def train(cfg: DictConfig) -> None:
         metrics = _collect_metrics()
         metrics_csv, csv_rows = _scan_metrics_csv(Path(cfg.paths.log_dir))
         has_validation = val_loaders is not None
+        if has_validation:
+            # The metrics callback logs e.g. `val/pdb_holdout/lddt.mean_lddt_protein`;
+            # resolve the concrete column instead of assuming one key name.
+            val_lddt_key = _preferred_lddt_key(csv_rows) or "val/mean_lddt"
+        else:
+            val_lddt_key = "train/per_epoch_mean_lddt_protein"
         if metrics_csv is not None:
             summary_payload["metrics_csv"] = str(metrics_csv)
-            metric_lddt_key = "val/mean_lddt" if has_validation else "train/per_epoch_mean_lddt_protein"
+            metric_lddt_key = val_lddt_key
             metric_loss_key = "val/total_loss" if has_validation else "train/per_epoch_total_loss"
             csv_best_lddt = _last_float(csv_rows, metric_lddt_key)
             csv_best_loss = _last_float(csv_rows, metric_loss_key)
@@ -678,7 +778,7 @@ def train(cfg: DictConfig) -> None:
             except Exception:
                 csv_final_epoch = current_epoch
             csv_final_loss = _last_float([final_row], "val/total_loss", "train/per_epoch_total_loss") if final_row else None
-            csv_final_lddt = _last_float([final_row], "val/mean_lddt", "train/per_epoch_mean_lddt_protein") if final_row else None
+            csv_final_lddt = _last_float([final_row], val_lddt_key, "train/per_epoch_mean_lddt_protein") if final_row else None
             if has_validation:
                 if csv_best_lddt is not None:
                     metrics["val/mean_lddt"] = csv_best_lddt
@@ -690,6 +790,15 @@ def train(cfg: DictConfig) -> None:
             summary_payload["final_epoch"] = csv_final_epoch
             summary_payload["final_epoch_loss"] = csv_final_loss
             summary_payload["final_epoch_lddt"] = csv_final_lddt
+        if has_validation:
+            # Backfill the holdout lDDT from the per-example validation CSV so
+            # run_summary.json always carries the holdout number, whatever the
+            # logger called the column.
+            holdout_lddt = _mean_lddt_from_validation_csv(
+                getattr(trainer, "validation_results_path", None)
+            )
+            if holdout_lddt is not None:
+                metrics["val/mean_lddt"] = holdout_lddt
         summary_payload["metrics"] = metrics
         if has_validation:
             summary_payload["best_val_lddt"] = metrics.get("val/mean_lddt")

@@ -15,6 +15,9 @@ from rfd3na.transforms.hbonds import (
     add_hydrogen_atom_positions,
     calculate_hbonds,
 )
+# `is_motif_atom` is needed to extend the h-bond acceptor selection to motif
+# atoms; the annotation originates from the conditioning features.
+from rfd3na.transforms.conditioning_base import get_motif_features
 
 from foundry.metrics.base import Metric
 from foundry.utils.ddp import RankedLogger
