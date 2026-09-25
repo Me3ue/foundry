@@ -1,0 +1,22 @@
+pdb_id,purpose,status,size_bytes,sha256,source,dest
+1bna,dsDNA 教程示例,missing,0,,,
+1ctt,M0097，AME 示例活性位点,missing,0,,,
+1euv,Ulp-1，半胱氨酸水解酶 motif 来源,missing,0,,,
+1fad,FAD 配体来源（可换成任意含 FAD 的结构）,missing,0,,,
+1lqs,bcov benchmark 额外靶点 IL-10Rb,missing,0,,,
+1mg5,M0255 酶设计教程示例,missing,0,,,
+1q75,RNA 教程示例,missing,0,,,
+1sam,SAM 配体来源（可换成任意含 SAM 的结构）,missing,0,,,
+1yjd,bcov benchmark 额外靶点 CD28,missing,0,,,
+1z92,PPI 靶点 IL-2Ra,missing,0,,,
+2gy5,PPI 靶点 Tie2,copied,2000,,out/_smoke_test/fake_mirror_demo/g2/2gy5.cif.gz,out/_smoke_test/paper_subset_demo/gy/2gy5.cif.gz
+2r5z,蛋白-DNA 复合物教程示例,missing,0,,,
+2x1w,bcov benchmark 额外靶点 VEGFR,missing,0,,,
+3di3,PPI 靶点 IL-7Ra（benchmark 定义未随仓库发布）,missing,0,,,
+4zxb,PPI 靶点 InsulinR,missing,0,,,
+5o45,PPI 靶点 PD-L1,copied,251346,,out/_smoke_test/fake_mirror_demo/o4/5o45.cif.gz,out/_smoke_test/paper_subset_demo/o4/5o45.cif.gz
+5o4d,ssDNA 教程示例,missing,0,,,
+7m5w,DNA 靶点 3,missing,0,,,
+7n5u,DNA 靶点 2,missing,0,,,
+7rte,DNA 靶点 1,copied,89465,,out/_smoke_test/fake_mirror_demo/rt/7rte.cif.gz,out/_smoke_test/paper_subset_demo/rt/7rte.cif.gz
+7v11,OQO 配体来源（仓库自带裁剪版）,missing,0,,,

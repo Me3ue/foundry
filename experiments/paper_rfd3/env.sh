@@ -46,8 +46,23 @@ REPORTS_DIR="$OUT/reports"               # 汇总报告
 
 # ------------------------------------------------------- Foundry 运行环境 ---
 # 已经安装好 rfd3 / mpnn / rf3 / foundry 入口的 Python 环境 bin 目录。
-# 若你用的是 venv，改成 <venv>/bin 即可。
-export RC_ENV_BIN="${RC_ENV_BIN:-/home/zhangzijian/anaconda3/envs/rc/bin}"
+# 未设置（或设置的位置里没有 rfd3）时会自动探测几个常见位置，
+# 这样同一份脚本在本地工作机和服务器上都能跑，不用手工改路径。
+if [[ -z "${RC_ENV_BIN:-}" || ! -x "${RC_ENV_BIN:-/nonexistent}/rfd3" ]]; then
+  for _cand in \
+      "/home/$(id -un)/anaconda3/envs/rc/bin" \
+      "/home/$(id -un)/miniconda3/envs/rc/bin" \
+      "$HOME/anaconda3/envs/rc/bin" \
+      "$HOME/miniconda3/envs/rc/bin" \
+      "$HOME/.conda/envs/rc/bin" \
+      "$HOME/mambaforge/envs/rc/bin" \
+      "$FOUNDRY_ROOT/.venv/bin" \
+      "$PAPER_ROOT/.venv/bin"; do
+    if [[ -x "$_cand/rfd3" ]]; then RC_ENV_BIN="$_cand"; break; fi
+  done
+  unset _cand
+fi
+export RC_ENV_BIN="${RC_ENV_BIN:-$HOME/anaconda3/envs/rc/bin}"
 PY="${PY:-$RC_ENV_BIN/python}"
 RF_ENV_NAME="${RF_ENV_NAME:-rc}"
 
@@ -57,7 +72,28 @@ RF3_CKPT="${RF3_CKPT:-$HOME/.foundry/checkpoints/rf3_foundry_01_24_latest_remapp
 MPNN_CKPT_DIR="${MPNN_CKPT_DIR:-$HOME/.foundry/checkpoints}"
 PROTEINMPNN_CKPT="${PROTEINMPNN_CKPT:-$MPNN_CKPT_DIR/proteinmpnn_v_48_020.pt}"
 LIGANDMPNN_CKPT="${LIGANDMPNN_CKPT:-$MPNN_CKPT_DIR/ligandmpnn_v_32_010_25.pt}"
-HBPLUS="${HBPLUS:-/home/zhangzijian/protein/HBPLUS/hbplus/hbplus}"
+HBPLUS="${HBPLUS:-$HOME/protein/HBPLUS/hbplus/hbplus}"
+
+# RFD3 权重找不到时在几个常见位置里再找一遍（本机 / 服务器路径不同）
+if [[ ! -f "$RFD3_CKPT" ]]; then
+  for _cand in \
+      "$MPNN_CKPT_DIR/rfd3_latest.ckpt" \
+      "$HOME/.foundry/checkpoints/rfd3_latest.ckpt" \
+      "/media/zzj/Data/rfd3_latest.ckpt" \
+      "/data/$(id -un)/rfd3_latest.ckpt" \
+      "$FOUNDRY_ROOT/rfd3_latest.ckpt"; do
+    if [[ -f "$_cand" ]]; then RFD3_CKPT="$_cand"; break; fi
+  done
+  unset _cand
+fi
+
+# --------------------------------------------------------- PDB 镜像（可选）---
+# 有本地镜像就指过来（外部已设的 PDB_MIRROR_PATH 优先）；没有就留空，
+# 01_prepare_inputs.py 会逐文件从 RCSB 下载 —— 论文 §3 一共只要 21 个结构，
+# 完全不需要同步 100 GB 的全量镜像。
+# 想从大镜像抽一个小镜像带过来： python 03_mirror_subset.py paper --help
+PDB_MIRROR="${PDB_MIRROR:-${PDB_MIRROR_PATH:-/media/zzj/Data/pdb_mirror}}"
+export PDB_MIRROR_PATH="$PDB_MIRROR"
 
 # =============================================================== 硬件配置 ===
 # ------------------------------------------------------------ CPU 并行度 ---

@@ -3,8 +3,8 @@
 #
 # Launch example:
 #   python models/rfd3/src/rfd3/train_lora.py experiment=nmf_zkp_encoder_pdb \
-#     paths.data.pdb_data_dir=/dev/shm/pdb_mirror \
-#     paths.data.pdb_parquet_dir=/dev/shm/pdb_metadata_latest \
+#     paths.data.pdb_data_dir=/backup01/zzj/pdb_mirror \
+#     paths.data.pdb_parquet_dir=/backup01/zzj/pdb_metadata_latest \
 #     paths.log_dir=$PWD/logs/train_nmf_zkp_pdb
 #
 # Verify the resolved config before a long run:
@@ -21,7 +21,7 @@ name: nmf-zkp-pdb
 save_checkpoints: false
 
 ckpt_config:
-  path: /dev/shm/pdb_metadata_latest/rfd3_latest.ckpt
+  path: /backup01/zzj/pdb_metadata_latest/rfd3_latest.ckpt
   reset_optimizer: true
 
 datasets:

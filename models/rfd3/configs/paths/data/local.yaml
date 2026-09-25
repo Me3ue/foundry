@@ -1,8 +1,8 @@
 # Local paths for user finetuning with personal mirrors and datasets.
 
-pdb_data_dir: /dev/shm/pdb_mirror
-pdb_parquet_dir: /dev/shm/pdb_metadata_latest
-cif_cache_dir: /dev/shm/pdb_mirror
+pdb_data_dir: /backup01/zzj/pdb_mirror
+pdb_parquet_dir: /backup01/zzj/pdb_metadata_latest
+cif_cache_dir: /backup01/zzj/pdb_mirror
 
 monomer_distillation_data_dir: /squash/af2_distillation_facebook/
 monomer_distillation_parquet_dir: /projects/ml/datahub/dfs/distillation/af2_distillation_facebook

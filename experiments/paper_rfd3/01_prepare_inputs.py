@@ -17,8 +17,10 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import re
+import shutil
 import sys
 import urllib.request
 from pathlib import Path
@@ -100,13 +102,31 @@ BINDER_LENGTH_DNA = (100, 130)
 # ------------------------------------------------------------------ 工具 ---
 
 
-def download_pdb(pdb_id: str, dest: Path, allow_download: bool = True) -> Path | None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if dest.exists():
+def locate_structure(pdb_id: str, dest_dir: Path, allow_download: bool = True,
+                     mirror: Path | None = None) -> Path | None:
+    """按 "本地缓存 -> 本地 PDB 镜像 -> RCSB 下载" 的顺序拿到一个结构文件。
+
+    这样服务器上**不需要完整镜像**：把 03_mirror_subset.py 抽出来的小镜像
+    放到某处并设好 PDB_MIRROR_PATH，或者干脆让它逐文件下载（每个几十 KB）都行。
+    """
+    pid = pdb_id.lower()
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    for ext in (".pdb", ".cif", ".cif.gz", ".pdb.gz", ".ent.gz"):
+        cand = dest_dir / f"{pid}{ext}"
+        if cand.exists():
+            return cand
+
+    hit = common.find_in_mirror(mirror or common.PDB_MIRROR, pid)
+    if hit is not None:
+        dest = dest_dir / hit.name          # 保留原扩展名，读取时按扩展名分派
+        shutil.copy2(hit, dest)
+        print(f"  取自本地镜像 {pdb_id}: {hit}")
         return dest
+
     if not allow_download:
-        print(f"  [skip] {pdb_id}: 本地无 {dest} 且禁止下载")
+        print(f"  [skip] {pdb_id}: 本地缓存和镜像里都没有，且禁止下载")
         return None
+    dest = dest_dir / f"{pid}.pdb"
     url = common.RCSB_DOWNLOAD.format(pdb_id=pdb_id.upper())
     print(f"  下载 {url}")
     try:
@@ -119,7 +139,14 @@ def download_pdb(pdb_id: str, dest: Path, allow_download: bool = True) -> Path |
 
 
 def read_any(path: Path):
-    parser = MMCIFParser(QUIET=True) if path.suffix in (".cif", ".mmcif") else PDBParser(QUIET=True)
+    """读取 pdb / cif（含 .gz）为 Biopython Structure。"""
+    name = path.name.lower()
+    if name.endswith(".gz"):
+        with gzip.open(path, "rt", encoding="utf-8", errors="ignore") as fh:
+            parser = MMCIFParser(QUIET=True) if ".cif" in name else PDBParser(QUIET=True)
+            return parser.get_structure(path.stem, fh)
+    parser = (MMCIFParser(QUIET=True) if path.suffix in (".cif", ".mmcif")
+              else PDBParser(QUIET=True))
     return parser.get_structure(path.stem, str(path))
 
 
@@ -262,7 +289,7 @@ def validate_hotspots(path: Path, chain_id: str, hotspots: dict) -> list[str]:
     return problems
 
 
-def prepare_ppi_paper(allow_download: bool) -> list[dict]:
+def prepare_ppi_paper(allow_download: bool, mirror: Path | None = None) -> list[dict]:
     """按仓库自带的 benchmark 定义，从 PDB 重建论文 §3.1 的靶点结构。
 
     benchmark 里的输入文件是作者裁剪 + 重新编号过的，仓库没随附；
@@ -290,8 +317,9 @@ def prepare_ppi_paper(allow_download: bool) -> list[dict]:
 
         dest = common.INPUTS_DIR / "ppi" / f"{name}.pdb"
         if not dest.exists():
-            raw = common.INPUTS_DIR / "raw" / f"{cfg['pdb_id'].lower()}.pdb"
-            if not download_pdb(cfg["pdb_id"], raw, allow_download):
+            raw = locate_structure(cfg["pdb_id"], common.INPUTS_DIR / "raw",
+                                   allow_download, mirror)
+            if raw is None:
                 continue
             try:
                 structure = read_any(raw)
@@ -324,11 +352,11 @@ def prepare_ppi_paper(allow_download: bool) -> list[dict]:
     return targets
 
 
-def prepare_ppi(allow_download: bool) -> dict:
+def prepare_ppi(allow_download: bool, mirror: Path | None = None) -> dict:
     print("[ppi] 蛋白靶点")
 
     # 优先用仓库自带的论文 benchmark 定义（5 个靶点）
-    targets = prepare_ppi_paper(allow_download)
+    targets = prepare_ppi_paper(allow_download, mirror)
 
     # 兜底 / 补充：仓库 tutorial 里现成的两个裁剪结构（沉积编号，可直接跑）
     if len(targets) < len(PPI_PAPER_TARGETS):
@@ -380,12 +408,13 @@ def prepare_ppi(allow_download: bool) -> dict:
     return {"targets": targets}
 
 
-def prepare_dna(allow_download: bool) -> dict:
+def prepare_dna(allow_download: bool, mirror: Path | None = None) -> dict:
     print("[dna] DNA 靶点")
     records = []
     for pdb_id in DNA_PDBS:
-        raw = common.INPUTS_DIR / "raw" / f"{pdb_id.lower()}.pdb"
-        if not download_pdb(pdb_id, raw, allow_download):
+        raw = locate_structure(pdb_id, common.INPUTS_DIR / "raw",
+                              allow_download, mirror)
+        if raw is None:
             continue
         try:
             structure = read_any(raw)
@@ -433,15 +462,16 @@ def prepare_dna(allow_download: bool) -> dict:
     return {"targets": records}
 
 
-def prepare_small_molecule(allow_download: bool) -> dict:
+def prepare_small_molecule(allow_download: bool, mirror: Path | None = None) -> dict:
     print("[sm] 小分子配体")
     records = []
     for code, cfg in SM_LIGANDS.items():
         if "source" in cfg and Path(cfg["source"]).exists():
             src, structure = Path(cfg["source"]), read_any(Path(cfg["source"]))
         elif "pdb" in cfg:
-            raw = common.INPUTS_DIR / "raw" / f"{cfg['pdb'].lower()}.pdb"
-            if not download_pdb(cfg["pdb"], raw, allow_download):
+            raw = locate_structure(cfg["pdb"], common.INPUTS_DIR / "raw",
+                                  allow_download, mirror)
+            if raw is None:
                 continue
             src, structure = raw, read_any(raw)
         else:
@@ -559,7 +589,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="准备 RFD3 论文实验输入")
     ap.add_argument("--only", nargs="*", default=None,
                     choices=["ppi", "dna", "sm", "enzyme", "symmetry", "uncond"])
-    ap.add_argument("--no-download", action="store_true")
+    ap.add_argument("--no-download", action="store_true",
+                    help="完全不联网，只用本地缓存/本地镜像")
+    ap.add_argument("--mirror", default=str(common.PDB_MIRROR),
+                    help="本地 PDB 镜像根目录（默认取 $PDB_MIRROR_PATH）")
+    ap.add_argument("--no-mirror", action="store_true", help="跳过本地镜像查找")
     args = ap.parse_args()
 
     common.ensure_dirs()
@@ -568,11 +602,18 @@ def main() -> int:
 
     steps = args.only or ["uncond", "ppi", "dna", "sm", "enzyme", "symmetry"]
     allow = not args.no_download
+    mirror = None if args.no_mirror else Path(args.mirror)
+    if mirror is not None:
+        if mirror.exists():
+            print(f"[mirror] 本地镜像: {mirror}")
+        else:
+            print(f"[mirror] 本地镜像不存在（{mirror}），将回退到逐文件下载")
+            mirror = None
     for step in steps:
         {"uncond": prepare_unconditional,
-         "ppi": lambda: prepare_ppi(allow),
-         "dna": lambda: prepare_dna(allow),
-         "sm": lambda: prepare_small_molecule(allow),
+         "ppi": lambda: prepare_ppi(allow, mirror),
+         "dna": lambda: prepare_dna(allow, mirror),
+         "sm": lambda: prepare_small_molecule(allow, mirror),
          "enzyme": lambda: prepare_enzyme(allow),
          "symmetry": lambda: prepare_symmetry()}[step]()
 

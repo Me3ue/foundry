@@ -8,16 +8,21 @@
 
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# Server project root. Override with PROJECT_ROOT if the checkout is elsewhere.
+PROJECT_ROOT="${PROJECT_ROOT:-/backup01/zzj/protein/foundry}"
+if [[ ! -d "${PROJECT_ROOT}/models/rfd3/src/rfd3" ]]; then
+  PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+fi
+REPO_ROOT="${PROJECT_ROOT}"
 cd "$REPO_ROOT"
 
-DATA="${DATA:-/dev/shm/pdb_mirror}"
-PARQUET="${PARQUET:-/dev/shm/pdb_metadata_latest}"
-PDB_MIRROR="${PDB_MIRROR:-/dev/shm/pdb_mirror}"
-export CCD_MIRROR_PATH="${CCD_MIRROR_PATH:-/dev/shm/ccd_mirror}"
-export CCD_PATH="${CCD_PATH:-/dev/shm/ccd_mirror}"
-LOG_ROOT="${LOG_ROOT:-~/protein/foundry/logs/train_pdb}"
-CKPT="${CKPT:-/dev/shm/pdb_metadata_latest/rfd3_latest.ckpt}"
+DATA="${DATA:-/backup01/zzj/pdb_mirror}"
+PARQUET="${PARQUET:-/backup01/zzj/pdb_metadata_latest}"
+PDB_MIRROR="${PDB_MIRROR:-/backup01/zzj/pdb_mirror}"
+export CCD_MIRROR_PATH="${CCD_MIRROR_PATH:-/backup01/zzj/ccd_mirror}"
+export CCD_PATH="${CCD_PATH:-/backup01/zzj/ccd_mirror}"
+LOG_ROOT="${LOG_ROOT:-/backup01/zzj/logs/train_pdb}"
+CKPT="${CKPT:-/backup01/zzj/pdb_metadata_latest/rfd3_latest.ckpt}"
 PYTHON="${PYTHON:-python}"
 SEED="${SEED:-42}"
 MAX_EPOCHS="${MAX_EPOCHS:-5}"

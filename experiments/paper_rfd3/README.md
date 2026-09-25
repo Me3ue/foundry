@@ -25,13 +25,19 @@ cd /home/zhangzijian/protein/foundry/experiments/paper_rfd3
 # 0) 从仓库自带配置里导出论文 benchmark 定义（PPI 五个靶点 + holdout 清单）
 python 02_extract_repo_benchmarks.py
 
+# 0b) 准备输入结构。不必同步 100 GB 的全量 PDB 镜像：
+#     默认逐文件从 RCSB 下载，论文 §3 全部实验一共只要 21 个结构（几十 MB）。
+python 01_prepare_inputs.py
+#     若已从本地镜像抽了子集（见 DATASETS.md §3.1），改成：
+#     python 01_prepare_inputs.py --mirror /data/$USER/pdb_mirror --no-download
+
 # 1) 先做一次环境自检（检查 GPU / rfd3 / mpnn / 权重路径）
 source ./env.sh && source ./lib.sh && check_env
 
 # 2) 冒烟测试：每个条件 8 个骨架，跑通全流程
 ./run_all.sh
 
-# 3) 论文规模（预计数天，见 §6 规模与显存）
+# 3) 论文规模（预计数天，见 §6 硬件适配）
 SCALE=paper ./run_all.sh
 
 # 4) 只汇总（任何时候都能单独跑）
@@ -459,8 +465,9 @@ experiments/paper_rfd3/
 │   ├── common.py              # 路径约定 + 论文各实验的 RFD3 输入规格构造
 │   ├── metrics.py             # 几何原语(aligned_rmsd/TM 并行聚类)、RASA、氢键、clash、判据
 │   └── summarize.py           # 扫描 out/ → CSV + Markdown 对照报告
-├── 01_prepare_inputs.py       # 下载并整理所有输入结构，生成设计规格
+├── 01_prepare_inputs.py       # 下载并整理输入（本地缓存 → 本地镜像 → RCSB 逐文件下载）
 ├── 02_extract_repo_benchmarks.py  # 从仓库 val/ 配置导出论文 benchmark 定义
+├── 03_mirror_subset.py        # 从 100 GB 本地镜像抽几十 MB 子集，不用整盘同步
 ├── 10…18_*.sh                 # 实验 1-9（各自内部多卡并行）
 ├── 50_sequence_design.py      # 批量 MPNN 序列设计（多进程，自动只重设计 binder）
 ├── 60_fold.py                 # 批量结构预测（分片 + 多卡，rf3 / af3 / chai）

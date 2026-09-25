@@ -1,1 +1,4 @@
-把这两个文件当作绘图脚本的样例输入/输出即可；正式数据由 ./17_exp8_speed.sh 生成。
+这两个目录只是 03_mirror_subset.py 的演示样例：
+  fake_mirror_demo/  伪造的本地镜像（RCSB 分卷布局）
+  subset_demo/       抽取出来的子集 + manifest
+正式数据请对 /media/zzj/Data/pdb_mirror 运行真正的抽取命令。

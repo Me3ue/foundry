@@ -29,7 +29,14 @@ hdr "步骤 0：从仓库配置里导出论文 benchmark 定义"
 "$PY" 02_extract_repo_benchmarks.py || warn "benchmark 导出失败（PPI 会退回 tutorial 结构）"
 
 hdr "步骤 0b：准备输入结构"
-"$PY" 01_prepare_inputs.py
+if [[ -d "$PDB_MIRROR_PATH" ]]; then
+  ok "使用本地 PDB 镜像: $PDB_MIRROR_PATH"
+  "$PY" 01_prepare_inputs.py --mirror "$PDB_MIRROR_PATH"
+else
+  warn "本地镜像不存在（$PDB_MIRROR_PATH）—— 改为逐文件从 RCSB 下载"
+  warn "论文 §3 一共只需 21 个结构（几十 MB）；要从大镜像抽子集见 DATASETS.md §3.1"
+  "$PY" 01_prepare_inputs.py --no-mirror
+fi
 
 run_step() {
   local id="$1" script="$2"

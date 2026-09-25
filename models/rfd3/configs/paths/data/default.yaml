@@ -1,6 +1,6 @@
 # path to directory with training splits
-pdb_data_dir: /dev/shm/pdb_mirror
-pdb_parquet_dir: /dev/shm/pdb_metadata_latest  # interfaces_df.parquet and pn_units_df.parquet
+pdb_data_dir: /backup01/zzj/pdb_mirror
+pdb_parquet_dir: /backup01/zzj/pdb_metadata_latest  # interfaces_df.parquet and pn_units_df.parquet
 
 # monomer distillation dataset
 monomer_distillation_data_dir: /home/zhangzijian/protein/foundry/single_structure_data

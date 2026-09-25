@@ -18,26 +18,31 @@
 # Usage:
 #   bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
 #   LAYER_SET=one LAYER=token_initializer.process_pll bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
-# Optional env:
-#   DATA=... PARQUET=... PDB_MIRROR=... LOG_ROOT=... CKPT=... PYTHON=python SEED=42 MAX_EPOCHS=5
+#   DATA=... PARQUET=... PDB_MIRROR=... PROJECT_ROOT=/backup01/zzj/protein/foundry LOG_ROOT=... CKPT=... PYTHON=python SEED=42 MAX_EPOCHS=5
 #   GPU=2  (default: use idle RTX A6000 GPU 2; set GPU=4 if needed)
 
 set -uo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# Server project root. Override with PROJECT_ROOT if the checkout is elsewhere.
+PROJECT_ROOT="${PROJECT_ROOT:-/backup01/zzj/protein/foundry}"
+if [[ ! -d "${PROJECT_ROOT}/models/rfd3/src/rfd3" ]]; then
+  # Fallback for running the script from another checkout location.
+  PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+fi
+REPO_ROOT="${PROJECT_ROOT}"
 cd "$REPO_ROOT"
 # Training/preflight must import the in-repo rfd3/foundry sources, not the
 # stale copies installed into the conda env's site-packages.
 export PYTHONPATH="${REPO_ROOT}/src:${REPO_ROOT}/models/rfd3/src:${REPO_ROOT}/models/rfd3na/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-DATA="${DATA:-/dev/shm/pdb_metadata_latest}"
-PARQUET="${PARQUET:-/dev/shm/pdb_metadata_latest}"
+DATA="${DATA:-/backup01/zzj/pdb_metadata_latest}"
+PARQUET="${PARQUET:-/backup01/zzj/pdb_metadata_latest}"
 # CIF/PDB mirror is separate from metadata parquet. The metadata dir only has
 # interfaces_df.parquet / pn_units_df.parquet / rfd3_latest.ckpt.
-PDB_MIRROR="${PDB_MIRROR:-/dev/shm/pdb_mirror}"
+PDB_MIRROR="${PDB_MIRROR:-/backup01/zzj/pdb_mirror}"
 # AtomWorks resolves the chemical component dictionary through this environment variable.
-export CCD_MIRROR_PATH="${CCD_MIRROR_PATH:-/dev/shm/ccd_mirror}"
-export CCD_PATH="${CCD_PATH:-/dev/shm/ccd_mirror}"
+export CCD_MIRROR_PATH="${CCD_MIRROR_PATH:-/backup01/zzj/ccd_mirror}"
+export CCD_PATH="${CCD_PATH:-/backup01/zzj/ccd_mirror}"
 # H-bond featurization (calculate_hbonds=0.2) shells out to HBPLUS. The binary
 # on this machine lives under /root, not the old /home/zhangzijian path baked into env.
 export HBPLUS_PATH="${HBPLUS_PATH:-/root/protein/HBPLUS/hbplus/hbplus}"
@@ -45,8 +50,8 @@ export HBPLUS_PATH="${HBPLUS_PATH:-/root/protein/HBPLUS/hbplus/hbplus}"
 # another free A6000 is preferred; do not use busy GPUs 0, 1, 3, or 5.
 GPU="${GPU:-2}"
 export CUDA_VISIBLE_DEVICES="${GPU}"
-LOG_ROOT="${LOG_ROOT:-/root/protein/foundry/logs/train_nmf_zkp_pdb}"
-CKPT="${CKPT:-/dev/shm/pdb_metadata_latest/rfd3_latest.ckpt}"
+LOG_ROOT="${LOG_ROOT:-/backup01/zzj/logs/train_nmf_zkp_pdb}"
+CKPT="${CKPT:-/backup01/zzj/pdb_metadata_latest/rfd3_latest.ckpt}"
 # Prefer the project rc environment when PYTHON is not explicitly supplied.
 # The system/base Python may resolve to a different site-packages tree and can
 # silently hide a broken dependency installation.
@@ -57,6 +62,20 @@ if [[ -z "${PYTHON+x}" ]]; then
     PYTHON="python"
   fi
 fi
+
+# Validate all external inputs before launching the multi-job sweep. This avoids
+# wasting hours when a parquet, checkpoint, PDB mirror, or CCD mirror is missing.
+for required_path in \
+  "${PARQUET}/interfaces_df.parquet" \
+  "${PARQUET}/pn_units_df.parquet" \
+  "${CKPT}" \
+  "${PDB_MIRROR}" \
+  "${CCD_MIRROR_PATH}"; do
+  if [[ ! -e "${required_path}" ]]; then
+    echo "ERROR: required path does not exist: ${required_path}" >&2
+    exit 1
+  fi
+done
 
 # Fail once, before launching every sweep job, if the runtime environment is
 # unusable.  In particular, pandas is imported by foundry's logging module.

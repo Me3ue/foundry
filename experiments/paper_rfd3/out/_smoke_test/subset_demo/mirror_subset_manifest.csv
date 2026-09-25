@@ -1,0 +1,4 @@
+pdb_id,purpose,status,size_bytes,sha256,source,dest
+2gy5,命令行指定,linked,2000,703ea85bc0668825585e01bbb64698ca062efbba66327abc967668daaee77fb0,/home/zzj/protein/foundry/.tmp_fake_mirror/g2/2gy5.cif.gz,/home/zzj/protein/foundry/.tmp_subset2/gy/2gy5.cif.gz
+5o45,命令行指定,linked,251346,ba8b75816d8180d8c9ddf7388834d7cbf72163e77ecb612b22449b4375e633a0,/home/zzj/protein/foundry/.tmp_fake_mirror/o4/5o45.cif.gz,/home/zzj/protein/foundry/.tmp_subset2/o4/5o45.cif.gz
+7rte,命令行指定,linked,89465,7b9ac256d92f19ad6d5306b1a8c6c06668abf89db402f66f637a009ad0106280,/home/zzj/protein/foundry/.tmp_fake_mirror/rt/7rte.cif.gz,/home/zzj/protein/foundry/.tmp_subset2/rt/7rte.cif.gz

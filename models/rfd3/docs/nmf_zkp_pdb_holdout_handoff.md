@@ -30,9 +30,9 @@ sweep 脚本会跑：
 
 - 仓库：`/root/protein/foundry`
 - 环境：`/opt/conda/envs/rc`
-- PDB mirror：`/dev/shm/pdb_mirror`
-- parquet / ckpt：`/dev/shm/pdb_metadata_latest`
-- 日志根目录：`/root/protein/foundry/logs/train_nmf_zkp_pdb`
+- PDB mirror：`/backup01/zzj/pdb_mirror`
+- parquet / ckpt：`/backup01/zzj/pdb_metadata_latest`
+- 日志根目录：`/backup01/zzj/logs/train_nmf_zkp_pdb`
 - 最近一次失败 sweep：`sweep_nmf_zkp_pdb_2026-09-10_18-57-38`
 - 训练预算：`crop_size=256`，`max_atoms_in_crop=1920`，`diffusion_batch_size_train=4`，GPU 约 80GB
 
@@ -188,7 +188,7 @@ export PYTHONPATH="/root/protein/foundry/src:/root/protein/foundry/models/rfd3/s
 2. 找已有 checkpoint，避免 572 epoch 从零重训：
 
 ```bash
-find /root/protein/foundry/logs/train_nmf_zkp_pdb/sweep_nmf_zkp_pdb_2026-09-10_18-57-38 -name '*.ckpt'
+find /backup01/zzj/logs/train_nmf_zkp_pdb/sweep_nmf_zkp_pdb_2026-09-10_18-57-38 -name '*.ckpt'
 ```
 
 3. 用修好的验证路径重新开 sweep，或只对已有 ckpt 补 holdout。
@@ -216,8 +216,8 @@ N_EXAMPLES=128 MAX_EPOCHS=575 INCLUDE_BASELINE=1 INCLUDE_ALL=0 \
 ```bash
 python models/rfd3/scripts/preflight_nmf_pdb_transforms.py \
   --experiment nmf_zkp_pdb \
-  --data-dir /dev/shm/pdb_metadata_latest \
-  --pdb-mirror /dev/shm/pdb_mirror \
+  --data-dir /backup01/zzj/pdb_metadata_latest \
+  --pdb-mirror /backup01/zzj/pdb_mirror \
   --output logs/pdb_transform_preflight.csv \
   --write-filter models/rfd3/configs/datasets/val/pdb_holdout.yaml
 ```
@@ -310,7 +310,7 @@ AttributeError: 'AtomArray' object has no attribute 'src_component'
 之前保存的最终 checkpoint：
 
 ```text
-/root/protein/foundry/logs/train_nmf_zkp_pdb/sweep_nmf_zkp_pdb_2026-09-12_10-08-08/train/baseline/2026-09-12_10-08_JOB_default/ckpt/epoch-0572.ckpt
+/backup01/zzj/logs/train_nmf_zkp_pdb/sweep_nmf_zkp_pdb_2026-09-12_10-08-08/train/baseline/2026-09-12_10-08_JOB_default/ckpt/epoch-0572.ckpt
 ```
 
 ## 13. 论文级 holdout 数据与 validation 频率

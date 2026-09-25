@@ -213,6 +213,125 @@ cif_cache_dir: /media/zzj/Data/pdb_mirror              # 解析缓存
 
 ---
 
+## 3.1 硬盘放不下 100 GB 镜像怎么办
+
+本机镜像在 `/media/zzj/Data/pdb_mirror`，服务器盘装不下。三种做法，按推荐顺序：
+
+| 方案 | 需要拷贝 | 适用场景 |
+|---|---|---|
+| **① 不同步镜像** | ~30 MB（逐文件下载） | 跑论文 §3 全部 in silico benchmark |
+| **② 抽子集** | 几十 MB | 同上，但想用本地镜像里的现成文件 |
+| **③ 抽 holdout 子集** | 约 1–3 GB | 还要跑 `pdb_holdout.yaml` 时间外推评测 |
+| （完整镜像） | ~100 GB | 训练 / 微调 |
+
+### ① 最推荐：根本不用镜像
+
+论文 §3 的全部实验加起来只要 **21 个结构文件**（PPI 靶点 5+3、DNA 靶点 3、
+配体来源 3、§4 motif 2、tutorial 5）。`01_prepare_inputs.py` 本来就是从 RCSB
+逐文件下载的，每个几百 KB：
+
+```bash
+python 02_extract_repo_benchmarks.py
+python 01_prepare_inputs.py          # 总共几十 MB，秒级完成
+```
+
+服务器上**完全不需要 PDB_MIRROR_PATH**（留空即可）。
+
+### ② 从本地镜像抽子集（推荐给"想复用本地文件"的情况）
+
+```bash
+# 先清点本地镜像，看布局和体积对不对
+python 03_mirror_subset.py audit --mirror /media/zzj/Data/pdb_mirror
+
+# 抽出论文需要的全部结构（约几十 MB）
+python 03_mirror_subset.py paper \
+    --mirror /media/zzj/Data/pdb_mirror \
+    --out    out/pdb_mirror_subset
+
+# 本地镜像里缺的，顺手从 RCSB 补上
+python 03_mirror_subset.py paper --mirror /media/zzj/Data/pdb_mirror \
+    --out out/pdb_mirror_subset --download-missing
+
+# 只看体积、不真正拷贝（先估算再决定）
+python 03_mirror_subset.py paper --mirror ... --out /tmp/x --fast
+```
+
+输出目录**保持 RCSB 分卷约定**（`{ID 的中间两位}/{ID}.cif.gz`，例如 `o4/5o45.cif.gz`），
+所以 AtomWorks / RFD3 会把它当成一个正常镜像来读：
+
+```
+out/pdb_mirror_subset/
+├── o4/5o45.cif.gz
+├── rt/7rte.cif.gz
+├── gy/2gy5.cif.gz
+├── ...
+├── mirror_subset_manifest.csv   # id / 用途 / 体积 / sha256
+└── README.txt
+```
+
+拷到服务器（只传这一个目录）：
+
+```bash
+rsync -avP out/pdb_mirror_subset/  server:/data/$USER/pdb_mirror/
+```
+
+服务器上指过去：
+
+```bash
+export PDB_MIRROR_PATH=/data/$USER/pdb_mirror
+# 或在 hydra 命令里覆盖
+#   paths.data.pdb_data_dir=/data/$USER/pdb_mirror
+```
+
+### ③ 还要跑 holdout 评测：按你的 manifest 抽
+
+`pdb_holdout.yaml` 需要从 parquet 里批量取结构，那就得把对应的 PDB 都带上。
+你工作区里的 `evaluation_manifest.csv`（257 行界面）正好可以当清单：
+
+```bash
+python 03_mirror_subset.py manifest \
+    --from-manifest evaluation_manifest.csv \
+    --out out/holdout_mirror --download-missing
+```
+
+只有约 250 个结构，粗估 **1–3 GB**，比 100 GB 小两个数量级。
+
+### 抽取脚本的其它用法
+
+```bash
+# 自己给 ID 列表
+python 03_mirror_subset.py ids --mirror /media/... --out out/subset --pdb-ids 5o45 4zxb 2gy5 1z92
+
+# 从文件读（一行一个 ID）
+python 03_mirror_subset.py ids --mirror /media/... --out out/subset --ids-file my_ids.txt
+
+# 同一块盘上几乎不占额外空间（硬链接）
+python 03_mirror_subset.py paper --mirror /media/... --out /media/.../subset --link
+```
+
+### 服务器端准备输入时的查找顺序
+
+`01_prepare_inputs.py` 现在按这个顺序找结构，命中就停：
+
+1. **本地输入缓存** `out/inputs/raw/<id>.{pdb,cif,cif.gz}`
+2. **本地镜像** `$PDB_MIRROR_PATH`（或 `--mirror <dir>`）
+3. **RCSB 逐文件下载**
+
+```bash
+# 明确指定镜像
+python 01_prepare_inputs.py --mirror /data/$USER/pdb_mirror
+
+# 完全离线（只用 1、2，不联网）
+python 01_prepare_inputs.py --no-download --mirror /data/$USER/pdb_mirror
+
+# 跳过镜像，直接下载
+python 01_prepare_inputs.py --no-mirror
+```
+
+`.pdb` / `.cif` / `.cif.gz` 都能直接读，所以镜像里抽出来的 `.cif.gz` 拿来就能用。
+
+---
+
 ## 4. 元数据 parquet
 
 训练/批量评测不直接扫文件系统，而是读两份 parquet 索引：
@@ -414,8 +533,10 @@ cd experiments/paper_rfd3
 python 02_extract_repo_benchmarks.py
 
 # 2) 下载并整理评测输入
-python 01_prepare_inputs.py            # 全部
-# 或分别来：--only ppi / dna / sm / enzyme / symmetry / uncond / ppi dna
+python 01_prepare_inputs.py            # 全部（逐文件下载，共几十 MB）
+# 或用本地镜像里的现成文件（见 §3.1）
+python 01_prepare_inputs.py --mirror /data/$USER/pdb_mirror --no-download
+# 或只准备某几块：--only ppi / dna / sm / enzyme / symmetry / uncond
 
 # 3) 跑（见 README.md / COMMANDS.md）
 ./run_all.sh
@@ -423,10 +544,11 @@ python 01_prepare_inputs.py            # 全部
 
 最终你需要的外部资源只有：
 
-- **RCSB 网络下载**（PDB 结构与 DNA 靶点，几 MB 级）
+- **PDB 结构**：要么逐文件从 RCSB 下（几十 MB），要么从本地镜像抽子集（§3.1），
+  **都不需要 100 GB 的全量镜像**
 - **MPNN 权重**两个 `.pt`（约 10 MB）
-- **RFD3 权重**（`foundry install base-models`）
+- **RFD3 权重**（`foundry install base-models`，约几百 MB）
 - **一个折叠后端**（RF3 权重约 1 GB，或 AF3 / Chai-1）
 - **AME 的 41 个案例**（去 RFdiffusion2 仓库取，见 `COMMANDS.md` §B.2 实验 5）
 
-一共几十 MB 到几 GB，一台单卡机器就能跑完整条 in silico 流程。
+一共几十 MB 到几 GB，**硬盘占用比全量镜像小两个数量级**。
