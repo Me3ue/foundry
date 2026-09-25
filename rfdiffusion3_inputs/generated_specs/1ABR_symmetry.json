@@ -1,6 +1,6 @@
 {
   "1ABR": {
-    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/1ABR_B.pdb",
+    "input": "/backup01/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/1ABR_B.pdb",
     "partial_t": 6.0,
     "dialect": 2,
     "extra": {

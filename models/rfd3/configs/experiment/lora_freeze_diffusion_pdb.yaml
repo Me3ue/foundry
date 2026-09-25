@@ -7,7 +7,7 @@ defaults:
 name: lora-freeze-diffusion-pdb
 
 ckpt_config:
-  path: /backup01/zzj/pdb_metadata_latest/rfd3_latest.ckpt
+  path: /dev/shm/pdb_metadata_latest/rfd3_latest.ckpt
   reset_optimizer: true
   parameter_freezing_config:
     freeze_by_default: false

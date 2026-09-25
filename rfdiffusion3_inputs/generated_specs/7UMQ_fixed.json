@@ -1,6 +1,6 @@
 {
   "7UMQ": {
-    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/7UMQ_J.pdb",
+    "input": "/backup01/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/7UMQ_J.pdb",
     "select_fixed_atoms": {},
     "select_unfixed_sequence": false,
     "dialect": 2,

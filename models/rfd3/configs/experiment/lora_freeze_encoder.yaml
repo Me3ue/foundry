@@ -7,7 +7,7 @@ defaults:
 name: lora-freeze-encoder
 
 ckpt_config:
-  path: /home/zhangzijian/protein/foundry/models/rfd3/rfd3_latest.ckpt
+  path: /backup01/zzj/protein/foundry/models/rfd3/rfd3_latest.ckpt
   reset_optimizer: true
   parameter_freezing_config:
     freeze_by_default: false

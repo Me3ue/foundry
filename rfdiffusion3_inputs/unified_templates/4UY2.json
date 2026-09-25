@@ -1,6 +1,6 @@
 {
   "4UY2": {
-    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/4UY2_A.pdb",
+    "input": "/backup01/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/4UY2_A.pdb",
     "select_fixed_atoms": {
       "A5": "BKBN",
       "A6": "BKBN",

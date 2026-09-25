@@ -1,6 +1,6 @@
 {
   "3BTA": {
-    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/3BTA_A.pdb",
+    "input": "/backup01/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/3BTA_A.pdb",
     "partial_t": null,
     "dialect": 2,
     "extra": {

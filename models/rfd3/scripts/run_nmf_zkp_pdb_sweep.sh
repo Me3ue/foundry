@@ -35,14 +35,14 @@ cd "$REPO_ROOT"
 # stale copies installed into the conda env's site-packages.
 export PYTHONPATH="${REPO_ROOT}/src:${REPO_ROOT}/models/rfd3/src:${REPO_ROOT}/models/rfd3na/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-DATA="${DATA:-/backup01/zzj/pdb_metadata_latest}"
-PARQUET="${PARQUET:-/backup01/zzj/pdb_metadata_latest}"
+DATA="${DATA:-/dev/shm/pdb_metadata_latest}"
+PARQUET="${PARQUET:-/dev/shm/pdb_metadata_latest}"
 # CIF/PDB mirror is separate from metadata parquet. The metadata dir only has
 # interfaces_df.parquet / pn_units_df.parquet / rfd3_latest.ckpt.
-PDB_MIRROR="${PDB_MIRROR:-/backup01/zzj/pdb_mirror}"
+PDB_MIRROR="${PDB_MIRROR:-/dev/shm/pdb_mirror}"
 # AtomWorks resolves the chemical component dictionary through this environment variable.
-export CCD_MIRROR_PATH="${CCD_MIRROR_PATH:-/backup01/zzj/ccd_mirror}"
-export CCD_PATH="${CCD_PATH:-/backup01/zzj/ccd_mirror}"
+export CCD_MIRROR_PATH="${CCD_MIRROR_PATH:-/dev/shm/ccd_mirror}"
+export CCD_PATH="${CCD_PATH:-/dev/shm/ccd_mirror}"
 # H-bond featurization (calculate_hbonds=0.2) shells out to HBPLUS. The binary
 # on this machine lives under /root, not the old /home/zhangzijian path baked into env.
 export HBPLUS_PATH="${HBPLUS_PATH:-/root/protein/HBPLUS/hbplus/hbplus}"
@@ -51,7 +51,7 @@ export HBPLUS_PATH="${HBPLUS_PATH:-/root/protein/HBPLUS/hbplus/hbplus}"
 GPU="${GPU:-2}"
 export CUDA_VISIBLE_DEVICES="${GPU}"
 LOG_ROOT="${LOG_ROOT:-/backup01/zzj/logs/train_nmf_zkp_pdb}"
-CKPT="${CKPT:-/backup01/zzj/pdb_metadata_latest/rfd3_latest.ckpt}"
+CKPT="${CKPT:-/dev/shm/pdb_metadata_latest/rfd3_latest.ckpt}"
 # Prefer the project rc environment when PYTHON is not explicitly supplied.
 # The system/base Python may resolve to a different site-packages tree and can
 # silently hide a broken dependency installation.

@@ -93,8 +93,7 @@ class DiffusionLoss(nn.Module):
     def forward(self, network_input, network_output, loss_input):
         X_L = network_output["X_L"]  # D, L, 3
         D = X_L.shape[0]
-        crd_mask_L = loss_input["crd_mask_L"]  # (D, L)
-        crd_mask_L = crd_mask_L.unsqueeze(0).expand(D, -1)
+
         tok_idx = network_input["f"]["atom_to_token_map"]
         t = network_input["t"]  # (D,)
         is_original_unindexed_token = loss_input["is_original_unindexed_token"][tok_idx]
@@ -215,6 +214,20 @@ def smoothed_lddt_loss(
     return_extras=False,
     eps=1e-6,
 ):
+    # Validation can provide singleton examples without an explicit batch axis.
+    if X_L.ndim == 2:
+        X_L = X_L.unsqueeze(0)
+    if X_gt_L.ndim == 2:
+        X_gt_L = X_gt_L.unsqueeze(0)
+    if crd_mask_L.ndim == 1:
+        crd_mask_L = crd_mask_L.unsqueeze(0)
+    elif crd_mask_L.ndim == 3 and crd_mask_L.shape[-1] == 1:
+        crd_mask_L = crd_mask_L.squeeze(-1)
+    if crd_mask_L.ndim != 2:
+        raise ValueError(
+            f"smoothed_lddt_loss expects crd_mask_L with shape [B, L], got {tuple(crd_mask_L.shape)}"
+        )
+
     @activation_checkpointing
     def _dolddt(X_L, X_gt_L, crd_mask_L, is_dna, is_rna, tok_idx, eps, use_amp=True):
         B, L = X_L.shape[:2]

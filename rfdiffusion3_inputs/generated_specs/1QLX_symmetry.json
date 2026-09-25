@@ -1,6 +1,6 @@
 {
   "1QLX": {
-    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/1QLX_A.pdb",
+    "input": "/backup01/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/1QLX_A.pdb",
     "partial_t": 4.0,
     "dialect": 2,
     "extra": {

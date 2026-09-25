@@ -20,7 +20,7 @@
 ## 0. 三分钟上手
 
 ```bash
-cd /home/zhangzijian/protein/foundry/experiments/paper_rfd3
+cd /backup01/zzj/protein/foundry/experiments/paper_rfd3
 
 # 0) 从仓库自带配置里导出论文 benchmark 定义（PPI 五个靶点 + holdout 清单）
 python 02_extract_repo_benchmarks.py

@@ -37,16 +37,16 @@
 # --- paths ---
 # Run this script FROM the foundry repo root. DATA is the folder you made in Exercise 4,
 # containing both af2_distillation_facebook.parquet and monomer.json. EDIT this path.
-DATA="/home/zhangzijian/protein/foundry/single_structure_data"
-LOGS="/home/zhangzijian/protein/foundry/logs/train"
+DATA="/backup01/zzj/protein/foundry/single_structure_data"
+LOGS="/backup01/zzj/protein/foundry/logs/train"
 
 # --- launch training ---
 # logger=csv writes metrics under $LOGS; swap to logger=wandb if you set WANDB_API_KEY above.
 python models/rfd3/src/rfd3/train.py  \
    experiment=single_structure  \
-   paths.data.monomer_distillation_parquet_dir="/home/zhangzijian/protein/foundry/single_structure_data" \
-   paths.data.monomer_distillation_data_dir="/home/zhangzijian/protein/foundry/single_structure_data"  \
-   paths.data.design_benchmark_data_dir="/home/zhangzijian/protein/foundry/single_structure_data"  \
-   paths.log_dir="/home/zhangzijian/protein/foundry/logs/train"   \
+   paths.data.monomer_distillation_parquet_dir="/backup01/zzj/protein/foundry/single_structure_data" \
+   paths.data.monomer_distillation_data_dir="/backup01/zzj/protein/foundry/single_structure_data"  \
+   paths.data.design_benchmark_data_dir="/backup01/zzj/protein/foundry/single_structure_data"  \
+   paths.log_dir="/backup01/zzj/protein/foundry/logs/train"   \
    logger=csv
    

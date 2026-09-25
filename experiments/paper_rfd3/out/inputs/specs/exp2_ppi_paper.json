@@ -2,7 +2,7 @@
   "insulinr": {
     "dialect": 2,
     "infer_ori_strategy": "hotspots",
-    "input": "/home/zhangzijian/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/insulinr.pdb",
+    "input": "/backup01/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/insulinr.pdb",
     "contig": "100-100,/0,B1-150",
     "length": "250-250",
     "redesign_motif_sidechains": false,
@@ -15,7 +15,7 @@
   "pdl1": {
     "dialect": 2,
     "infer_ori_strategy": "hotspots",
-    "input": "/home/zhangzijian/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/pdl1.pdb",
+    "input": "/backup01/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/pdl1.pdb",
     "contig": "100-100,/0,B1-115",
     "length": "215-215",
     "redesign_motif_sidechains": false,
@@ -28,7 +28,7 @@
   "vegfr": {
     "dialect": 2,
     "infer_ori_strategy": "hotspots",
-    "input": "/home/zhangzijian/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/vegfr.pdb",
+    "input": "/backup01/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/vegfr.pdb",
     "contig": "100-100,/0,B1-200",
     "length": "300-300",
     "redesign_motif_sidechains": false,
@@ -45,7 +45,7 @@
   "rbd": {
     "dialect": 2,
     "infer_ori_strategy": "hotspots",
-    "input": "/home/zhangzijian/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/rbd.pdb",
+    "input": "/backup01/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/rbd.pdb",
     "contig": "100-100,/0,B1-195",
     "length": "295-295",
     "redesign_motif_sidechains": false,
@@ -64,7 +64,7 @@
   "cd28": {
     "dialect": 2,
     "infer_ori_strategy": "hotspots",
-    "input": "/home/zhangzijian/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/cd28.pdb",
+    "input": "/backup01/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/cd28.pdb",
     "contig": "100-100,/0,B1-118",
     "length": "218-218",
     "redesign_motif_sidechains": false,
@@ -78,7 +78,7 @@
   "il2ra": {
     "dialect": 2,
     "infer_ori_strategy": "hotspots",
-    "input": "/home/zhangzijian/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/il2ra.pdb",
+    "input": "/backup01/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/il2ra.pdb",
     "contig": "100-100,/0,B1-122",
     "length": "222-222",
     "redesign_motif_sidechains": false,
@@ -93,7 +93,7 @@
   "il10ra": {
     "dialect": 2,
     "infer_ori_strategy": "hotspots",
-    "input": "/home/zhangzijian/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/il10ra.pdb",
+    "input": "/backup01/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/il10ra.pdb",
     "contig": "100-100,/0,B1-207",
     "length": "307-307",
     "redesign_motif_sidechains": false,
@@ -109,7 +109,7 @@
   "tie2": {
     "dialect": 2,
     "infer_ori_strategy": "hotspots",
-    "input": "/home/zhangzijian/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/tie2.pdb",
+    "input": "/backup01/zzj/protein/foundry/experiments/paper_rfd3/out/inputs/ppi/tie2.pdb",
     "contig": "100-100,/0,B1-188",
     "length": "288-288",
     "redesign_motif_sidechains": false,

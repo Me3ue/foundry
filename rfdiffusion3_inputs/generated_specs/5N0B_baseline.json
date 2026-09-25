@@ -1,6 +1,6 @@
 {
   "5N0B": {
-    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/5N0B_A.pdb",
+    "input": "/backup01/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/5N0B_A.pdb",
     "partial_t": null,
     "dialect": 2,
     "extra": {

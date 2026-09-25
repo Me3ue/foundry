@@ -1,6 +1,6 @@
 {
   "1QLX": {
-    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/1QLX_A.pdb",
+    "input": "/backup01/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/1QLX_A.pdb",
     "select_fixed_atoms": {
       "A125": "BKBN",
       "A126": "BKBN",

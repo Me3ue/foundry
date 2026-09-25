@@ -4,7 +4,7 @@
 
 | 项目 | 值 |
 |---|---|
-| 仓库根 | `/home/zhangzijian/protein/foundry`（Foundry：atomworks + RFD3 + RF3 + MPNN） |
+| 仓库根 | `/backup01/zzj/protein/foundry`（Foundry：atomworks + RFD3 + RF3 + MPNN） |
 | 运行环境 | conda env `rc` → `/home/zhangzijian/anaconda3/envs/rc/bin/{rfd3,mpnn,rf3,rfd3na,foundry}` |
 | RFD3 权重 | `/media/zzj/Data/rfd3_latest.ckpt` |
 | HBPLUS | `/home/zhangzijian/protein/HBPLUS/hbplus/hbplus`（已写进 `foundry/.env` 的 `HBPLUS_PATH`） |

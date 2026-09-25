@@ -1,6 +1,6 @@
 {
   "2AAI": {
-    "input": "/home/zhangzijian/protein/foundry/rfdiffusion3_inputs/single_chain/2AAI_A.pdb",
+    "input": "/backup01/zzj/protein/foundry/rfdiffusion3_inputs/single_chain/2AAI_A.pdb",
     "select_fixed_atoms": {
       "A44": "BKBN",
       "A45": "BKBN",
