@@ -56,6 +56,14 @@
 - 三个 sweep 的 bash 命令行**完全相同**（`LAYER_SET` 等是环境变量，不进 argv），
   靠 `pgrep -f run_nmf_zkp_pdb_sweep.sh` 无法区分；只有子进程 python 的
   `paths.log_dir=<sweep dir>` 能唯一标识某一轮。
+- **参数量少 ≠ 训练快**：`train_lora.py` 在 NMF 注入前把**整个基座**设为
+  `requires_grad=False`（只训因子），而 `nmf_zkp_pdb` baseline **无任何冻结配置**（168M
+  全量微调）。逐 step 只有 dW 能省 → 理论上限 1.5×，实际约 1.15–1.25×；encoder 一族 6 个
+  job ≈ baseline 墙钟的 5–6 倍。测速用 `TIMING=1`（分段计时）或 `<tag>.run.log` 里的
+  `Mean Time per Batch (s)`。
+- **镜像里可用的 CPU 工具栈**（沙箱排查用）：`/home/zzj/.workbuddy/tmp/wb_torch`（torch CPU、
+  pandas、matplotlib）、`wb_torch2`、`wb_tools`（pyflakes）、`wb_hydra`（hydra-core，
+  可 `initialize_config_dir("models/rfd3/configs")` + `compose(...)` 验证 override 合法）。
 - 详细排错手册见用户级 skill `foundry-rfd3-eval-debug`（2026-09-25 建）。
 
 ## 目录
