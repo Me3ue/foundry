@@ -56,6 +56,11 @@
 - 三个 sweep 的 bash 命令行**完全相同**（`LAYER_SET` 等是环境变量，不进 argv），
   靠 `pgrep -f run_nmf_zkp_pdb_sweep.sh` 无法区分；只有子进程 python 的
   `paths.log_dir=<sweep dir>` 能唯一标识某一轮。
+- **产物有两个粒度**：① 逐 job（`<tag>.run.log` 实时 tee、`<tag>.run_summary.json`
+  =`<name>.step<N>.run_summary.json`、`val_metrics/validation_output_all_epochs.csv`、
+  `<tag>.exit_code`）在该 job 结束就立刻有——所以 encoder 不用等 6 个全跑完；
+  ② sweep 级汇总（`comparison_table.*`、`paper_summary.*`、`figures/`、
+  `paper_training_cost.*`）只在 `JOBS` 循环**全部**结束后才写，中途 kill 就没有。
 - **参数量少 ≠ 训练快**：`train_lora.py` 在 NMF 注入前把**整个基座**设为
   `requires_grad=False`（只训因子），而 `nmf_zkp_pdb` baseline **无任何冻结配置**（168M
   全量微调）。逐 step 只有 dW 能省 → 理论上限 1.5×，实际约 1.15–1.25×；encoder 一族 6 个
