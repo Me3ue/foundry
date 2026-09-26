@@ -574,6 +574,14 @@ fi
 
 "${PYTHON}" models/rfd3/scripts/plot_nmf_zkp_pdb_metrics.py "${SWEEP_DIR}" --ckpt "${CKPT}" || true
 
+# Cost/resource table (wall time, peak GPU memory, trainable fraction per
+# setting). The banner below has always advertised these files, but nothing
+# produced them; run the summariser that actually writes them.
+if ! "${PYTHON}" models/rfd3/scripts/summarize_nmf_zkp_cost.py "${SWEEP_DIR}"; then
+  echo "Training cost summary generation failed (pandas missing?)." >&2
+  overall_failed=1
+fi
+
 echo ""
 echo "Done. Comparison table:"
 echo "  ${TABLE_OUT}"

@@ -211,6 +211,8 @@ echo "Regenerating the combined report with ${PYTHON}"
   echo "WARNING: summarize failed (is pandas installed in ${PYTHON}?)" >&2; }
 "${PYTHON}" models/rfd3/scripts/plot_nmf_zkp_pdb_metrics.py "${OUT_DIR}" --ckpt "${CKPT:-}" || \
   echo "WARNING: plotting failed; the CSV/MD tables above are still valid." >&2
+"${PYTHON}" models/rfd3/scripts/summarize_nmf_zkp_cost.py "${OUT_DIR}" || \
+  echo "WARNING: cost summary failed; the tables above are still valid." >&2
 
 echo
 echo "Combined report:"
@@ -218,4 +220,5 @@ echo "  ${OUT_DIR}/paper_summary.md          (per-setting lDDT + bootstrap CI)"
 echo "  ${OUT_DIR}/paper_paired_deltas.csv   (baseline-paired deltas; needs a baseline tag)"
 echo "  ${OUT_DIR}/paper_per_example_lddt.csv"
 echo "  ${OUT_DIR}/paper_metrics.md"
+echo "  ${OUT_DIR}/paper_training_cost.md    (wall time + peak GPU memory per setting)"
 echo "  ${OUT_DIR}/figures/paper_training_curves.pdf"
