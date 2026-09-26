@@ -32,6 +32,15 @@
 # commands above) as the authoritative report. Keep the total number of
 # dataloader workers across the concurrent jobs <= available CPU cores.
 #
+# Ran out of time before the loop finished? Everything below (comparison_table,
+# paper_summary, figures, paper_training_cost) is written ONLY after the last
+# job returns, so a killed run leaves none of them. Per-job artefacts are still
+# on disk, so build the report from those instead:
+#   python models/rfd3/scripts/report_partial_sweep.py --out <OUT_DIR> \
+#     [--discover <LOG_ROOT>] [--drop-incomplete] <sweep dir ...>
+# It labels every setting complete / training-only and refuses to invent a
+# holdout number for a job that was stopped before its validation pass.
+#
 # Usage:
 #   bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
 #   LAYER_SET=one LAYER=token_initializer.process_pll bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
