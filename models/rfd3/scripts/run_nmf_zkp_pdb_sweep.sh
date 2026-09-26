@@ -239,6 +239,24 @@ if [[ -n "${EXTRA_OVERRIDES:-}" ]]; then
   COMMON_OVERRIDES+=(${EXTRA_OVERRIDES})
 fi
 
+# Opt-in per-phase timing. A replacement-NMF job freezes the entire base model
+# (train_lora.py sets requires_grad=False on every parameter, then injects only
+# the factors), so it can skip the weight-gradient GEMMs -- but the forward pass
+# and the activation-gradient path are identical to the baseline, and the
+# dataloader is shared. TimingCallback is the only way to see which of those
+# dominates a step: it logs, per step, forward_loss_backward / optimizer_step /
+# train_loader_next to metrics.csv as `timings/*` and prints a table every
+# TIMING_EVERY steps:
+#   TIMING=1 ... bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
+# Read it as: timings/forward_loss_backward is the part that *could* differ
+# between a frozen and a fully trainable run; timings/train_loader_next is the
+# host-side cost that cannot, and if it is of the same order the sweep is
+# dataloader bound and no amount of freezing will speed it up.
+if [[ "${TIMING:-0}" == "1" ]]; then
+  COMMON_OVERRIDES+=("+callbacks.timing_callback._target_=foundry.callbacks.timing_logging.TimingCallback")
+  COMMON_OVERRIDES+=("+callbacks.timing_callback.log_every_n=${TIMING_EVERY:-100}")
+fi
+
 LAYER_SET="${LAYER_SET:-encoder}"
 LAYER="${LAYER:-}"
 
