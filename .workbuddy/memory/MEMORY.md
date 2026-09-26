@@ -61,6 +61,11 @@
   `<tag>.exit_code`）在该 job 结束就立刻有——所以 encoder 不用等 6 个全跑完；
   ② sweep 级汇总（`comparison_table.*`、`paper_summary.*`、`figures/`、
   `paper_training_cost.*`）只在 `JOBS` 循环**全部**结束后才写，中途 kill 就没有。
+- **跑不完也能出论文级数据**：`python models/rfd3/scripts/report_partial_sweep.py
+  --out <OUT_DIR> [--discover <LOG_ROOT>] [<sweep dir>...]`。就地读取各目录、按 tag
+  选来源（有 validation CSV 的压过被 kill 的），输出 `partial_report.md` + 4 张图
+  + CSV/JSON；耗时缺失时回退解析 `run.log` 的 `Epoch N Summary` 表；**不会给被 kill
+  的 job 编 holdout 数值**。数值口径 import 自官方 summarizer（实测逐位相同）。
 - **参数量少 ≠ 训练快**：`train_lora.py` 在 NMF 注入前把**整个基座**设为
   `requires_grad=False`（只训因子），而 `nmf_zkp_pdb` baseline **无任何冻结配置**（168M
   全量微调）。逐 step 只有 dW 能省 → 理论上限 1.5×，实际约 1.15–1.25×；encoder 一族 6 个
