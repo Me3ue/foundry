@@ -36,10 +36,26 @@
   整体跳过、0 个 optimizer step，但仍会执行 fit 后的那次显式 holdout 验证。
 - NMF sweep 的验证指标列名是 `val/pdb_holdout/lddt.mean_lddt_protein`
   （不是 `val/mean_lddt`）；权威源是 `<out>/val_metrics/validation_output_all_epochs.csv`。
+- **GPU 是 6× A6000 48GB + 32 逻辑核**（早前“11.5 GiB”的记录已过时）。
+  sweep 脚本用 `PRESET=a6000` / `a6000xl` 调档；**峰值显存 ∝ D · L²**，
+  且真正生效的裁剪限制是 `max_atoms_in_crop`（1920 原子 ≈ 137 残基），验证阶段恒用 D=1。
+- **GPU 运行环境的解释器是 `/backup01/zzj/rc-cu128/bin/python`**（不是 `(base)`，也不是
+  `/home/zzj/anaconda3/envs/rc`）。在 `(base)` 里跑会报 `No module named 'pandas'`——那是
+  环境选错，不是缺包。判别：`python -c "import pandas, torch, atomworks"` 能全过才对。
 - **改 loss/指标前先跑** `python models/rfd3/scripts/check_loss_and_metric_shapes.py`（18 项，
   只要 torch，不用 GPU/数据集）；沙箱里的 CPU torch 在 `/home/zzj/.workbuddy/tmp/wb_torch`。
 - 2026-09-25 修了子集 lDDT 归一化（含 DNA/RNA 的结构上 `mean_lddt_protein` 原来被低估
   约 n_subset/n_total 倍）→ **该日期之前的 lDDT 数值不能和新结果直接比**。
+- **sweep 的 job 是单卡顺序执行的**，`JOBS` 顺序 = `baseline`（若 `INCLUDE_BASELINE=1`）
+  → `encoder` 6 → `proj` 6 → `head` 2。所以中途 kill 时"已完成哪些 tag"由这个顺序决定：
+  跑完 baseline 就杀掉 = `train/` 里只有 `baseline`。
+- **拆卡跑的报告要合并**：`bash models/rfd3/scripts/merge_sweep_reports.sh <out> [--discover <root>] [--drop-incomplete] [--exclude 'glob,...'] <dir...>`。
+  按 tag 选来源目录（完整版优先于半截版，打平取命令行靠前者）；只搬报告必需的小文件，
+  跳过 GB 级 `val_structures/`；随后重跑 summarize + plot 生成 `paper_summary.*` /
+  `paper_paired_deltas.csv` / `figures/`。**kill 过的轮次一定加 `--drop-incomplete`**。
+- 三个 sweep 的 bash 命令行**完全相同**（`LAYER_SET` 等是环境变量，不进 argv），
+  靠 `pgrep -f run_nmf_zkp_pdb_sweep.sh` 无法区分；只有子进程 python 的
+  `paths.log_dir=<sweep dir>` 能唯一标识某一轮。
 - 详细排错手册见用户级 skill `foundry-rfd3-eval-debug`（2026-09-25 建）。
 
 ## 目录
