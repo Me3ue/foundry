@@ -61,6 +61,17 @@
   `<tag>.exit_code`）在该 job 结束就立刻有——所以 encoder 不用等 6 个全跑完；
   ② sweep 级汇总（`comparison_table.*`、`paper_summary.*`、`figures/`、
   `paper_training_cost.*`）只在 `JOBS` 循环**全部**结束后才写，中途 kill 就没有。
+- **长跑必看 `/tmp`**：torch 默认 `file_descriptor` 共享策略要在 `TMPDIR/pymp-*/`
+  里建 unix socket，而 `get_temp_dir()` 的目录只靠 atexit 清理；DataLoader worker
+  每 epoch 被信号杀死 → **每 worker 每 epoch 泄漏一个目录**，小 tmpfs 的 `/tmp`
+  几百 epoch 后必满，报 `OSError: [Errno 28] ... '/tmp/pymp-xxxx'`（在
+  `queues._feed` 线程里），之后 batch 不再送达、主进程可能永久阻塞。
+  对策：sweep 脚本已默认 `TMPDIR=${LOG_ROOT}/_worker_tmp`；长跑加
+  `PERSISTENT_WORKERS=1`（真正堵住，worker 不再每 epoch 重生——`fabric.fit()` 只建
+  一个 DataLoader，epoch 循环复用）；已经在跑的可救：
+  `bash models/rfd3/scripts/cleanup_worker_tmp.sh --keep <NUM_WORKERS>` 先 dry-run。
+  ⚠️ `/backup01/zzj/logs/...` 这类路径要留神：`save_checkpoints=false` 时**没有断点，
+  重启=从头再来**，所以能救就别重启。
 - **跑不完也能出论文级数据**：`python models/rfd3/scripts/report_partial_sweep.py
   --out <OUT_DIR> [--discover <LOG_ROOT>] [<sweep dir>...]`。就地读取各目录、按 tag
   选来源（有 validation CSV 的压过被 kill 的），输出 `partial_report.md` + 4 张图
