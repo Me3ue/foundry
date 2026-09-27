@@ -169,6 +169,36 @@ CSV_OUT="${CSV_OUT:-${SWEEP_DIR}/comparison_table.csv}"
 mkdir -p "$SWEEP_DIR"
 
 # ---------------------------------------------------------------------------
+# Worker temp dir. On Linux torch shares CPU tensors between processes with the
+# `file_descriptor` strategy: each tensor crossing a process boundary duplicates
+# its fd via multiprocessing.resource_sharer, which needs a unix socket inside
+# `TMPDIR/pymp-XXXX/`. `multiprocessing.util.get_temp_dir()` creates that
+# directory once per process and removes it from an atexit hook -- but DataLoader
+# workers are recycled every epoch and killed with a signal, so the hook never
+# runs and one `pymp-*` directory leaks per worker per epoch. A 700-epoch sweep
+# with 8 workers leaves ~5600 directories; on a small tmpfs /tmp that fills up
+# (each directory costs a page) and every later epoch dies with
+#   OSError: [Errno 28] No space left on device: '/tmp/pymp-xxxx'
+# in the queue feeder thread, which stops batches from being delivered.
+# Keep TMPDIR on a roomy filesystem, and see
+#   bash models/rfd3/scripts/cleanup_worker_tmp.sh   (dry run; add --apply)
+# for a sweep that is already running.
+# PERSISTENT_WORKERS=1 additionally stops the leak at the source by keeping the
+# workers alive for the whole run instead of re-forking them every epoch.
+# SHARING_STRATEGY=file_system is the other torch-side alternative; it avoids the
+# sockets entirely but parks the shared memory under /dev/shm instead, so check
+# that filesystem first (this project stages the PDB mirror there).
+# ---------------------------------------------------------------------------
+WORKER_TMP="${WORKER_TMP:-${LOG_ROOT}/_worker_tmp}"
+mkdir -p "${WORKER_TMP}"
+export TMPDIR="${WORKER_TMP}"
+_worker_tmp_avail_kb="$(df -Pk "${WORKER_TMP}" 2>/dev/null | awk 'NR==2 {print $4}')"
+if [[ -n "${_worker_tmp_avail_kb}" && "${_worker_tmp_avail_kb}" -lt 2097152 ]]; then
+  echo "WARNING: only $((_worker_tmp_avail_kb / 1024)) MiB free on TMPDIR=${WORKER_TMP}." >&2
+  echo "         Worker temp dirs leak ~4 KiB per worker per epoch; 700 epochs x 8 workers needs ~25 MiB." >&2
+fi
+
+# ---------------------------------------------------------------------------
 # GPU sizing. The plain defaults (D=4 diffusion samples, 1920-atom crop, 2
 # dataloader workers) were sized for a ~12 GiB card. Pick a preset for the
 # card actually in use; explicit env vars always win over the preset:
@@ -238,6 +268,12 @@ COMMON_OVERRIDES=(
   "dataloader.train.dataloader_params.num_workers=${NUM_WORKERS:-2}"
   "dataloader.train.dataloader_params.prefetch_factor=${PREFETCH:-2}"
 )
+
+# Keep DataLoader workers alive for the whole run (see the TMPDIR note above):
+# fewer forks, no per-epoch worker start-up cost, and no per-epoch `pymp-*` leak.
+if [[ "${PERSISTENT_WORKERS:-0}" == "1" ]]; then
+  COMMON_OVERRIDES+=("dataloader.train.dataloader_params.persistent_workers=true")
+fi
 
 # Escape hatch for extra hydra overrides applied to every job, e.g. a fast
 # evaluation-only smoke test that trains for zero steps and only runs the
