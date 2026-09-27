@@ -22,14 +22,16 @@ gpu_table() {
   local exe; exe="$(command -v nvidia-smi || true)"
   [[ -n "$exe" ]] || return 0
   local out
+  # 一定要带 nounits：不然 nvidia-smi 会把单位一起输出（"18492 MiB"），
+  # 再拼一次 " MiB" 就变成 "18492 MiB MiB"。
   out="$("$exe" --query-gpu=index,name,memory.free,memory.total,utilization.gpu \
-         --format=csv,noheader 2>/dev/null || true)"
+         --format=csv,noheader,nounits 2>/dev/null || true)"
   # 驱动异常时 nvidia-smi 会把错误写到 stdout，这里识别并跳过
   if [[ -z "$out" || "$out" == *"has failed"* || "$out" == *"couldn't communicate"* ]]; then
     return 0
   fi
   printf '%s\n' "$out" | awk -F', *' '
-    { printf "    GPU %-2s %-22s 空闲 %6s / %6s MiB  利用率 %s\n", $1, $2, $3, $4, $5 }'
+    $1 ~ /^[0-9]+$/ { printf "    GPU %-2s %-22s 空闲 %6s / %6s MiB  利用率 %s%%\n", $1, $2, $3, $4, $5 }'
 }
 
 # 空闲显存 >= GPU_POOL_MIN_FREE 的卡数
@@ -52,7 +54,29 @@ gpu_available() {
 
 check_env() {
   hdr "环境自检"
-  [[ -x "$PY" ]] || die "Python 不可用: $PY"
+  if [[ ! -x "$PY" ]]; then
+    warn "Python 不可用: $PY"
+    echo >&2
+    warn "  RC_ENV_BIN = ${RC_ENV_BIN:-<未设置>}"
+    if [[ -n "${CONDA_PREFIX:-}" ]]; then
+      warn "  当前激活环境 = $CONDA_PREFIX"
+      if [[ -x "$CONDA_PREFIX/bin/rfd3" ]]; then
+        ok  "  这个环境里就有 rfd3，直接指过去即可："
+        warn "      export RC_ENV_BIN=$CONDA_PREFIX/bin"
+      fi
+    else
+      warn "  当前没有激活任何 conda / venv 环境"
+    fi
+    if command -v rfd3 >/dev/null 2>&1; then
+      ok  "  PATH 里有 rfd3：$(command -v rfd3)"
+      warn "      export RC_ENV_BIN=$(dirname "$(command -v rfd3)")"
+    fi
+    echo >&2
+    warn "  两个办法："
+    warn "    a) export RC_ENV_BIN=<装了 rfd3/foundry 的环境>/bin   然后重跑"
+    warn "    b) conda activate <该环境> 后重跑（脚本会自动认 PATH 里的 rfd3）"
+    die "环境未就位，已停止（否则后面会一路报奇怪的错）"
+  fi
   ok "python     = $PY"
   local c
   for c in rfd3 mpnn rf3; do

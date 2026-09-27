@@ -26,23 +26,56 @@ source ./env.sh
 source ./lib.sh
 
 hdr "实验 8：推理速度标定（Fig. 1d）"
-LENGTHS="${LENGTHS:-50 100 150 200 250 300}"
-REPEATS="${REPEATS:-3}"
+# 测速规模按 SCALE 缩放：quick 冒烟时别把时间全花在测速上
+# （6 个长度 × (1 预热 + 3 次) = 24 次采样，单卡要几十分钟）。
+LENGTHS="${LENGTHS:-}"
+if [[ -z "$LENGTHS" ]]; then
+  case "${SCALE:-quick}" in
+    quick) LENGTHS="100 200" ;;
+    *)     LENGTHS="50 100 150 200 250 300" ;;
+  esac
+fi
+REPEATS="${REPEATS:-}"
+if [[ -z "$REPEATS" ]]; then
+  case "${SCALE:-quick}" in
+    quick) REPEATS=1 ;;
+    *)     REPEATS=3 ;;
+  esac
+fi
 STEP_TIMESTEPS="${STEP_TIMESTEPS:-$NUM_TIMESTEPS}"
 SPEED_BATCH="${SPEED_BATCH:-1}"          # 单骨架，测纯 per-sample 时间
 DEST="$DESIGNS_DIR/exp8_speed"
 RESULT="$METRICS_DIR/speed_scaling.csv"
 [[ -f "$RESULT" ]] || echo "backend,length,repeat,wallclock_s,timesteps,step_scale,gpu" > "$RESULT"
 
-# 挑一张最空闲的卡独占（用 --query-gpu 排序，取空闲显存最大且利用率最低的）
+# 挑一张卡独占做测速。
 pick_idle_gpu() {
+  # 1) 上游已经指明了 GPUS（例如 SINGLE_GPU=1 自动选出的那张）→ 必须用它。
+  #    测速得和整个流程用同一张卡，另挑一张会跟自己的任务抢显存。
+  if [[ -n "${GPUS:-}" ]]; then
+    printf '%s' "${GPUS%%,*}"
+    return
+  fi
   command -v nvidia-smi >/dev/null 2>&1 || { echo ""; return; }
-  nvidia-smi --query-gpu=index,memory.free,utilization.gpu \
-             --format=csv,noheader,nounits 2>/dev/null |
-    awk -F', *' '{printf "%s %s %s\n", $3+0, -$2, $1}' | sort -n | head -1 | awk '{print $3}'
+  # 2) 否则选**空闲显存最多**的那张。不能按利用率挑 —— 利用率可能瞬时为 0，
+  #    但显存已被别人的进程占掉大半，测速既不准也可能 OOM（实测踩过：
+  #    挑了只剩 18 GB 的 GPU 0，而 GPU 3 空着 48 GB）。
+  nvidia-smi --query-gpu=index,memory.free --format=csv,noheader,nounits 2>/dev/null |
+    awk -F', *' '$1 ~ /^[0-9]+$/ && $2+0 > 0 {print $2+0, $1}' |
+    sort -k1,1nr | head -1 | awk '{print $2}'
 }
 IDLE_GPU="$(pick_idle_gpu)"
-[[ -n "$IDLE_GPU" ]] && ok "独占 GPU $IDLE_GPU 做测速（其余任务请勿占用它）"
+if [[ -n "$IDLE_GPU" ]]; then
+  _idle_free="$(nvidia-smi --id="$IDLE_GPU" --query-gpu=memory.free \
+                --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')"
+  [[ "$_idle_free" =~ ^[0-9]+$ ]] || _idle_free=0
+  ok "独占 GPU $IDLE_GPU 做测速（空闲 ${_idle_free} MiB；测速期间请勿占用它）"
+  if (( _idle_free < GPU_POOL_MIN_FREE )); then
+    warn "这张卡只剩 ${_idle_free} MiB（门槛 ${GPU_POOL_MIN_FREE} MiB）——"
+    warn "测速数字会受显存争用影响。想更准就等它空出来，或用 GPUS=<空闲卡> 指定。"
+  fi
+  unset _idle_free
+fi
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-$IDLE_GPU}"
 
 "$PY" - "$LENGTHS" "$INPUTS_DIR/specs/exp8_speed.json" <<'PY'

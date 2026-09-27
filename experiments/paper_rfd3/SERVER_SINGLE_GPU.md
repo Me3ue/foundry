@@ -177,6 +177,7 @@ PDF 里没有 Supplemental Methods，这两项必须自己补：
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
+| `Python 不可用: .../anaconda3/envs/rc/bin/python` | 环境探测没找到真正的 conda 环境 | `export RC_ENV_BIN=/backup01/zzj/rc-cu128/bin` 后重跑；或先 `conda activate <环境>`（脚本会认 PATH 里的 `rfd3`） |
 | `OSError: [Errno 28] ... pymp-xxxx`，之后像卡住 | worker temp 目录泄漏、`/tmp` 满 | `env.sh` 把 `TMPDIR` 挪到 `$OUT/_worker_tmp`；`PERSISTENT_WORKERS=1` 默认开 |
 | `CUDA out of memory` | batch 太大 | 降 `DIFFUSION_BATCH_SIZE`（推理）；跑 `05_probe_vram.sh` 找边界 |
 | `nvidia-smi` 报驱动通信失败但命令存在 | 错误写进 **stdout**，被当成显存值 | `05_probe_vram.sh` 已校验返回纯数字 |

@@ -91,10 +91,18 @@ run_experiments() {
 
 # ------------------------------------------------------------ 各阶段实现 ---
 phase_probe() {
-  if [[ ! -f "$OUT/vram_profile.json" ]] || (( PROBE )); then
+  # PROBE=1 强制探测；默认只在缺 profile 时提示，不阻塞（探测要 20-40 分钟，
+  # 只想先冒烟跑通链路时不该被迫等）。想让一次命令全包，就加 PROBE=1。
+  if (( PROBE )); then
     GPU_ID="${GPU_ID:-${GPUS%%,*}}" ./05_probe_vram.sh
+  elif [[ -f "$OUT/vram_profile.json" ]]; then
+    ok "已有显存档位 $OUT/vram_profile.json（实测值已生效）"
   else
-    ok "已有 $OUT/vram_profile.json，跳过显存探测（想重测就加 PROBE=1）"
+    warn "还没做过显存探测 —— 本次用手册默认 batch（推理=$DIFFUSION_BATCH_SIZE，"
+    warn "训练=$DIFFUSION_BS_TRAIN）。A6000 49 GB 上这远没用满。"
+    warn "想把显存吃满、明显缩短墙钟，另开一个终端跑一次（20-40 分钟，只需一次）："
+    warn "    cd $(pwd) && GPU_ID=${GPUS%%,*} ./05_probe_vram.sh"
+    warn "跑完重跑本脚本即可自动加载；或者本次直接用 PROBE=1 一起跑。"
   fi
 }
 

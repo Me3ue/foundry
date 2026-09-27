@@ -45,24 +45,52 @@ METRICS_DIR="$OUT/metrics"               # 指标 CSV/JSON
 REPORTS_DIR="$OUT/reports"               # 汇总报告
 
 # ------------------------------------------------------- Foundry 运行环境 ---
-# 已经安装好 rfd3 / mpnn / rf3 / foundry 入口的 Python 环境 bin 目录。
-# 未设置（或设置的位置里没有 rfd3）时会自动探测几个常见位置，
-# 这样同一份脚本在本地工作机和服务器上都能跑，不用手工改路径。
+# 已经装好 rfd3 / mpnn / rf3 / foundry 入口的 Python 环境 bin 目录。
+#
+# 优先级（从高到低）：
+#   1. 显式给的 $RC_ENV_BIN
+#   2. **当前 PATH 里的 `rfd3`** —— 你已经 `conda activate` 了环境时这就是答案，
+#      最可靠（不必猜目录叫什么名字）
+#   3. 当前激活的 conda / venv（$CONDA_PREFIX / $VIRTUAL_ENV）
+#   4. 一串常见固定路径
+#
+# ⚠️ 别用 `$(id -un)` 去拼目录名：用户名和家目录/安装目录常常对不上
+#    （本机实测：用户名 `zhangzijian`，但环境在 `/backup01/zzj/rc-cu128`），
+#    拼出来必然不存在，然后安静地退化到一个空路径，报 “Python 不可用”。
+_rc_env_candidates() {
+  local p
+  if p="$(command -v rfd3 2>/dev/null)" && [[ -n "$p" ]]; then
+    dirname "$p"
+  fi
+  [[ -n "${CONDA_PREFIX:-}" ]] && echo "$CONDA_PREFIX/bin"
+  [[ -n "${VIRTUAL_ENV:-}"   ]] && echo "$VIRTUAL_ENV/bin"
+  # 常见固定位置（把已知的用户名/目录名不一致的路径显式列全）
+  printf '%s\n' \
+    "/backup01/zzj/rc-cu128/bin" \
+    "/backup01/zzj/rc/bin" \
+    "/backup01/$(id -un)/rc-cu128/bin" \
+    "/opt/conda/envs/rc/bin" \
+    "/home/$(id -un)/anaconda3/envs/rc/bin" \
+    "/home/$(id -un)/miniconda3/envs/rc/bin" \
+    "${HOME:-/root}/anaconda3/envs/rc/bin" \
+    "${HOME:-/root}/miniconda3/envs/rc/bin" \
+    "${HOME:-/root}/.conda/envs/rc/bin" \
+    "${HOME:-/root}/mambaforge/envs/rc/bin" \
+    "/backup01/zzj/protein/foundry/.venv/bin" \
+    "$FOUNDRY_ROOT/.venv/bin" \
+    "$PAPER_ROOT/.venv/bin" 2>/dev/null || true
+}
 if [[ -z "${RC_ENV_BIN:-}" || ! -x "${RC_ENV_BIN:-/nonexistent}/rfd3" ]]; then
-  for _cand in \
-      "/backup01/$(id -un)/rc-cu128/bin" \
-      "/opt/conda/envs/rc/bin" \
-      "/home/$(id -un)/anaconda3/envs/rc/bin" \
-      "/home/$(id -un)/miniconda3/envs/rc/bin" \
-      "$HOME/anaconda3/envs/rc/bin" \
-      "$HOME/miniconda3/envs/rc/bin" \
-      "$HOME/.conda/envs/rc/bin" \
-      "$HOME/mambaforge/envs/rc/bin" \
-      "$FOUNDRY_ROOT/.venv/bin" \
-      "$PAPER_ROOT/.venv/bin"; do
-    if [[ -x "$_cand/rfd3" ]]; then RC_ENV_BIN="$_cand"; break; fi
-  done
+  while IFS= read -r _cand; do
+    if [[ -n "$_cand" && -x "$_cand/rfd3" ]]; then RC_ENV_BIN="$_cand"; break; fi
+  done < <(_rc_env_candidates)
   unset _cand
+fi
+# 退而求其次：只要 python 存在也行（有些步骤不需要 rfd3 入口）
+if [[ -z "${RC_ENV_BIN:-}" || ! -x "${RC_ENV_BIN:-/nonexistent}/python" ]]; then
+  if [[ -n "${CONDA_PREFIX:-}" && -x "$CONDA_PREFIX/bin/python" ]]; then
+    RC_ENV_BIN="$CONDA_PREFIX/bin"
+  fi
 fi
 export RC_ENV_BIN="${RC_ENV_BIN:-$HOME/anaconda3/envs/rc/bin}"
 PY="${PY:-$RC_ENV_BIN/python}"

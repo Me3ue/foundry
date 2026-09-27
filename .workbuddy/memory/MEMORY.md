@@ -10,6 +10,8 @@
 | 权重与数据（服务器） | `/dev/shm/pdb_metadata_latest/`（`rfd3_latest.ckpt` + 两个 parquet）、`/dev/shm/pdb_mirror`（82 GB / 250,359 cif.gz）、`/dev/shm/ccd_mirror`（1.7 GB） |
 | 权重（本机） | `/media/zzj/Data/{rfd3_latest.ckpt, pdb_mirror, pdb_metadata_latest, ccd_mirror}` |
 | Path 探测 | `experiments/paper_rfd3/env.sh` 的 `_pick_dir`/`_pick_file` 自动选，**两边共用一份脚本**；加机器就加候选路径 |
+| ⚠️ 环境探测 | **绝不用 `$(id -un)`/`$USER` 拼安装目录**（用户名 `zhangzijian` ≠ 目录 `zzj`，实测踩过）。优先 `command -v rfd3` → `$CONDA_PREFIX/bin` → 固定候选表。用户环境：`/backup01/zzj/rc-cu128/bin`。出错时 `export RC_ENV_BIN=...` 可立即绕过 |
+| ⚠️ 同步给用户 | **必须给「整目录 rsync」并在源路径结尾加斜杠**，不要只列文件名 —— 实测漏传 `experiments/paper_rfd3/lib/` 子目录，导致 8 个脚本全报 `No module named 'lib'`，而报错完全看不出是"文件没传" |
 | HBPLUS | `/home/zhangzijian/protein/HBPLUS/hbplus/hbplus`（已写进 `foundry/.env` 的 `HBPLUS_PATH`） |
 | TMalign | `/usr/bin/TMalign` |
 | GPU | **2026-09-27 起只有 1 张 RTX A6000 49 GB 可用（GPU 3）**；早前的 "11.5 GiB" 与 "6×A6000" 记录均已过时 |
