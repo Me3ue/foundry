@@ -432,23 +432,78 @@ def cmd_extract(args) -> int:
         split_key = "interfaces" if "interfaces" in name else "pn_units"
         print(f"[{split}] 读取 {name} ...")
         import pyarrow.parquet as pq_mod
-        available = set(pq_mod.ParquetFile(path).schema_arrow.names)
+        pf = pq_mod.ParquetFile(path)
+        available = set(pf.schema_arrow.names)
         if args.keep_all_columns:
             use_cols = None
-            print("  [--keep-all-columns] 读取全列（内存需求可达几十 GB）")
+            print("  [--keep-all-columns] 读取全列（内存需求可达几十 GB，小内存机器别用）")
         else:
             use_cols = [c for c in COLUMNS_BY_SPLIT[split_key] if c in available]
             missing = [c for c in COLUMNS_BY_SPLIT[split_key] if c not in available]
             if missing:
                 print(f"  [note] 源 parquet 没有这些列，已跳过: {missing}")
             print(f"  只读取 {len(use_cols)} 列（对应训练配置的 columns_to_load）")
-        df = pd.read_parquet(path, columns=use_cols)
-        filtered = (filter_interface(pd, df) if split == "interface"
-                    else filter_pn_unit(pd, df))
-        del df
-        n_filt = len(filtered)
-        sub = sample_rows(pd, filtered, args.rows, args.per_cluster, args.seed)
-        del filtered
+
+        # 按 row group 分批过滤 + 抽样：687 万行 × 18 列一次性读进来会吃掉
+        # 上百 GB（本机 30 GB 内存实测被 SIGKILL），而分批处理时内存峰值只跟
+        # **单个 row group** 有关，与整表大小无关。
+        filter_fn = (filter_interface if split == "interface" else filter_pn_unit)
+        n_rg = max(1, pf.num_row_groups)
+        per_rg = ((args.rows + n_rg - 1) // n_rg) if args.rows else 0
+        if args.rows:
+            print(f"  分批：{n_rg} 个 row group，每批抽 {per_rg} 行（跨批覆盖全表）")
+        else:
+            print(f"  ⚠️ --rows 0 = 全量保留，内存需求 ≈ 整表大小，建议在 ≥128 GB 内存的机器上跑")
+
+        parts: list = []
+        n_filt = 0
+        for i in range(n_rg):
+            try:
+                table = pf.read_row_group(i, columns=use_cols)
+            except Exception as exc:  # noqa: BLE001
+                warn_msg = f"  [warn] row group {i} 读取失败: {exc}"
+                print(warn_msg)
+                continue
+            batch = table.to_pandas()
+            del table
+            kept = filter_fn(pd, batch)
+            del batch
+            n_filt += len(kept)
+            if len(kept):
+                if per_rg:
+                    parts.append(sample_rows(pd, kept, per_rg, args.per_cluster,
+                                             args.seed + i))
+                else:
+                    parts.append(kept)
+            del kept
+
+        if not parts:
+            sub = pd.DataFrame(columns=use_cols or [])
+        elif len(parts) == 1:
+            sub = parts[0]
+        else:
+            sub = pd.concat(parts, ignore_index=True)
+        del parts
+
+        # 每批都按 per_rg 取了，合并后可能略超目标；用固定 seed 截到目标行数，
+        # 保证同一 seed 重跑结果一致。
+        if args.rows and len(sub) > args.rows:
+            sub = sub.sample(n=args.rows, random_state=args.seed).reset_index(drop=True)
+
+        # 剔除镜像里没有的结构 —— 训练时解析器找不到 cif 会直接报错
+        # （find_existing_file_path 返回 None）。只对抽中的这几个 unique pdb_id
+        # 做 stat，很快。
+        if not args.allow_missing:
+            uniq = {str(x).lower() for x in sub["pdb_id"].unique()}
+            have = {p for p in uniq if find_in_mirror(mirror, p) is not None}
+            lacking = sorted(uniq - have)
+            if lacking:
+                before = len(sub)
+                sub = sub[sub["pdb_id"].astype(str).str.lower().isin(have)].reset_index(drop=True)
+                print(f"  [剔除] 镜像里没有这 {len(lacking)} 个 pdb_id，已去掉对应 {before - len(sub)} 行: "
+                      f"{lacking[:10]}{' ...' if len(lacking) > 10 else ''}")
+                print(f"         想保留它们就加 --allow-missing，或用 --download-missing 从 RCSB 补齐")
+
         n_ids = sub["pdb_id"].nunique()
         print(f"  训练 filters 后 {n_filt:,} 行 -> 抽 {len(sub):,} 行 / "
               f"{n_ids:,} 个 pdb_id / {sub['cluster'].nunique():,} 个 cluster")
@@ -661,6 +716,9 @@ def main() -> int:
     p_ex.add_argument("--keep-all-columns", action="store_true",
                       help="子集 parquet 保留全部 60 列（默认只保留训练配置需要的列；"
                            "全列读入可能吃掉几十 GB 内存）")
+    p_ex.add_argument("--allow-missing", action="store_true",
+                      help="允许子集里含镜像中不存在的 pdb_id（默认会剔除，"
+                           "因为训练时找不到 cif 会报错）")
     p_ex.set_defaults(func=cmd_extract)
 
     p_v = sub.add_parser("verify", help="校验子集自洽性")

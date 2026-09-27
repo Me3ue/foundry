@@ -50,6 +50,8 @@ REPORTS_DIR="$OUT/reports"               # 汇总报告
 # 这样同一份脚本在本地工作机和服务器上都能跑，不用手工改路径。
 if [[ -z "${RC_ENV_BIN:-}" || ! -x "${RC_ENV_BIN:-/nonexistent}/rfd3" ]]; then
   for _cand in \
+      "/backup01/$(id -un)/rc-cu128/bin" \
+      "/opt/conda/envs/rc/bin" \
       "/home/$(id -un)/anaconda3/envs/rc/bin" \
       "/home/$(id -un)/miniconda3/envs/rc/bin" \
       "$HOME/anaconda3/envs/rc/bin" \
@@ -66,35 +68,92 @@ export RC_ENV_BIN="${RC_ENV_BIN:-$HOME/anaconda3/envs/rc/bin}"
 PY="${PY:-$RC_ENV_BIN/python}"
 RF_ENV_NAME="${RF_ENV_NAME:-rc}"
 
+# --------------------------------------------------- 路径探测小工具 ---
+# 服务器与本地工作机的数据/权重位置不一样（服务器把镜像和 parquet 放在
+# /dev/shm 这样的 tmpfs 上）。这里统一按"第一个存在的路径"自动选，
+# 一份脚本两边都能直接跑，不用手改。
+_pick_dir() {
+  local var="$1"; shift
+  local cur="${!var:-}"
+  if [[ -n "$cur" && -d "$cur" ]]; then return 0; fi
+  local c first="${1:-}"
+  for c in "$@"; do
+    if [[ -d "$c" ]]; then printf -v "$var" '%s' "$c"; return 0; fi
+  done
+  [[ -n "$cur" ]] || printf -v "$var" '%s' "$first"
+  return 0
+}
+_pick_file() {
+  local var="$1"; shift
+  local cur="${!var:-}"
+  if [[ -n "$cur" && -f "$cur" ]]; then return 0; fi
+  local c first="${1:-}"
+  for c in "$@"; do
+    if [[ -f "$c" ]]; then printf -v "$var" '%s' "$c"; return 0; fi
+  done
+  [[ -n "$cur" ]] || printf -v "$var" '%s' "$first"
+  return 0
+}
+
 # --------------------------------------------------------------- 模型权重 ---
-RFD3_CKPT="${RFD3_CKPT:-/media/zzj/Data/rfd3_latest.ckpt}"
-RF3_CKPT="${RF3_CKPT:-$HOME/.foundry/checkpoints/rf3_foundry_01_24_latest_remapped.ckpt}"
 MPNN_CKPT_DIR="${MPNN_CKPT_DIR:-$HOME/.foundry/checkpoints}"
 PROTEINMPNN_CKPT="${PROTEINMPNN_CKPT:-$MPNN_CKPT_DIR/proteinmpnn_v_48_020.pt}"
 LIGANDMPNN_CKPT="${LIGANDMPNN_CKPT:-$MPNN_CKPT_DIR/ligandmpnn_v_32_010_25.pt}"
 HBPLUS="${HBPLUS:-$HOME/protein/HBPLUS/hbplus/hbplus}"
 
-# RFD3 权重找不到时在几个常见位置里再找一遍（本机 / 服务器路径不同）
-if [[ ! -f "$RFD3_CKPT" ]]; then
-  for _cand in \
-      "$MPNN_CKPT_DIR/rfd3_latest.ckpt" \
-      "$HOME/.foundry/checkpoints/rfd3_latest.ckpt" \
-      "/media/zzj/Data/rfd3_latest.ckpt" \
-      "/data/$(id -un)/rfd3_latest.ckpt" \
-      "$FOUNDRY_ROOT/rfd3_latest.ckpt"; do
-    if [[ -f "$_cand" ]]; then RFD3_CKPT="$_cand"; break; fi
-  done
-  unset _cand
+# RFD3 主权重：服务器上通常就在元数据目录里（/dev/shm/pdb_metadata_latest）
+RFD3_CKPT="${RFD3_CKPT:-}"
+_pick_file RFD3_CKPT \
+    "/dev/shm/pdb_metadata_latest/rfd3_latest.ckpt" \
+    "$MPNN_CKPT_DIR/rfd3_latest.ckpt" \
+    "$HOME/.foundry/checkpoints/rfd3_latest.ckpt" \
+    "/media/zzj/Data/rfd3_latest.ckpt" \
+    "/backup01/$(id -un)/rfd3_latest.ckpt" \
+    "$FOUNDRY_ROOT/rfd3_latest.ckpt"
+# 元数据目录 = RFD3 权重所在目录（interfaces_df.parquet / pn_units_df.parquet 同处）。
+# 注意要校验目录里真有 parquet 才采信 —— 有的机器把 ckpt 单独放在别处。
+PDB_PARQUET_DIR="${PDB_PARQUET_DIR:-}"
+if [[ -z "$PDB_PARQUET_DIR" && -f "$RFD3_CKPT" ]]; then
+  _ckpt_dir="$(dirname "$RFD3_CKPT")"
+  if [[ -f "$_ckpt_dir/interfaces_df.parquet" ]]; then
+    PDB_PARQUET_DIR="$_ckpt_dir"
+  fi
+  unset _ckpt_dir
 fi
+_pick_dir PDB_PARQUET_DIR \
+    "/dev/shm/pdb_metadata_latest" \
+    "/media/zzj/Data/pdb_metadata_latest" \
+    "/backup01/$(id -un)/pdb_metadata_latest" \
+    "$HOME/pdb_metadata_latest"
 
-# --------------------------------------------------------- PDB 镜像（可选）---
+RF3_CKPT="${RF3_CKPT:-$HOME/.foundry/checkpoints/rf3_foundry_01_24_latest_remapped.ckpt}"
+
+# --------------------------------------------------------- PDB 镜像与 CCD ---
 # 有本地镜像就指过来（外部已设的 PDB_MIRROR_PATH 优先）；没有就留空，
 # 01_prepare_inputs.py 会逐文件从 RCSB 下载 —— 论文 §3 一共只要 21 个结构，
 # 完全不需要同步 100 GB 的全量镜像。
 # 想从大镜像抽一个小镜像带过来： python 03_mirror_subset.py paper --help
-PDB_MIRROR="${PDB_MIRROR:-${PDB_MIRROR_PATH:-/media/zzj/Data/pdb_mirror}}"
+PDB_MIRROR="${PDB_MIRROR:-${PDB_MIRROR_PATH:-}}"
+_pick_dir PDB_MIRROR \
+    "/dev/shm/pdb_mirror" \
+    "/media/zzj/Data/pdb_mirror" \
+    "/backup01/$(id -un)/pdb_mirror" \
+    "$HOME/pdb_mirror"
 export PDB_MIRROR_PATH="$PDB_MIRROR"
+export PDB_MIRROR="$PDB_MIRROR"
 
+# CCD（化学组分字典）：训练时解析配体/非标准残基要用，约 1.7 GB，全量带着即可
+CCD_MIRROR="${CCD_MIRROR:-${CCD_MIRROR_PATH:-}}"
+_pick_dir CCD_MIRROR \
+    "/dev/shm/ccd_mirror" \
+    "/media/zzj/Data/ccd_mirror" \
+    "/backup01/$(id -un)/ccd_mirror" \
+    "$HOME/ccd_mirror"
+export CCD_MIRROR_PATH="$CCD_MIRROR"
+export CCD_PATH="$CCD_MIRROR"
+# H-bond 特征化（calculate_hbonds）会 fork HBPLUS，不同机器路径不同
+export HBPLUS_PATH="${HBPLUS_PATH:-$HBPLUS}"
+export PDB_PARQUET_DIR
 # =============================================================== 硬件配置 ===
 # ------------------------------------------------------------ CPU 并行度 ---
 NPROC="$(nproc 2>/dev/null || echo 16)"
@@ -109,25 +168,81 @@ export MKL_NUM_THREADS="${MKL_NUM_THREADS:-4}"
 export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-4}"
 export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-4}"
 
-# --------------------------------------------------------------- 多卡调度 ---
+# --------------------------------------------------------------- GPU 选择 ---
 # GPUS：只用这些卡（逗号分隔）。留空 = 自动挑空闲的。
 GPUS="${GPUS:-}"
 # 同时跑几个任务（= 占用几张卡）。auto = 按当前满足显存门槛的卡数决定。
 MAX_PARALLEL_GPUS="${MAX_PARALLEL_GPUS:-auto}"
 # 显卡空闲显存低于这个值（MiB）就不再往上排任务。
 GPU_POOL_MIN_FREE="${GPU_POOL_MIN_FREE:-25000}"
-# 单个 RFD3 任务预计占用多少显存（MiB）。A6000 48 GB 上 batch=8、L≈200 大约 15-25 GB。
+# 单个 RFD3 任务预计占用多少显存（MiB）。下面 05_probe_vram.sh 会实测出真值。
 GPU_JOB_MEM="${GPU_JOB_MEM:-25000}"
+
+# 空闲显存最多的那张卡的 index（拿不到就返回空）
+_pick_best_gpu() {
+  local exe; exe="$(command -v nvidia-smi || true)"
+  [[ -n "$exe" ]] || return 1
+  "$exe" --query-gpu=index,memory.free --format=csv,noheader,nounits 2>/dev/null \
+    | awk -F', *' '{print $2+0, $1}' | sort -k1,1nr | head -1 | awk '{print $2}'
+}
+
+# SINGLE_GPU=1：只占一张卡（自动挑空闲最多的），并行度强制为 1。
+# 适用于"服务器上只剩一张卡空着"的情形 —— 此时不靠多卡并来压缩墙钟，
+# 而是靠「把这张卡的显存吃满（大 batch）+ 把 CPU worker 拉满 + 数据放 /dev/shm」。
+SINGLE_GPU="${SINGLE_GPU:-0}"
+if [[ "$SINGLE_GPU" == "1" ]]; then
+  if [[ -z "$GPUS" ]]; then
+    GPUS="$(_pick_best_gpu 2>/dev/null || true)"
+  fi
+  MAX_PARALLEL_GPUS=1
+  # 单卡时每个实验占用整张卡，门槛可以放到「空卡」的标准
+  GPU_POOL_MIN_FREE="${GPU_POOL_MIN_FREE_OVERRIDE:-30000}"
+fi
 
 # ------------------------------------------------------------ 显存与批量 ---
 # A6000 有 48 GB，不需要低显存降级。
 LOW_MEMORY="${LOW_MEMORY:-False}"
 if [[ "$LOW_MEMORY" == "True" ]]; then LOW_MEM_FLAG="--low_memory"; else LOW_MEM_FLAG=""; fi
-# 论文默认 diffusion_batch_size=8。A6000 上可以往上抬（16/32）来缩短墙钟时间，
-# 但**只影响吞吐，不影响采样分布**；要与论文数字严格对齐就保持 8。
+
+# -------- 显存档位：优先读 05_probe_vram.sh 实测出来的最优值 ----------------
+# 单卡情形下"节省时间"= 把这张卡的显存吃到接近满：batch 越大，单位时间吞吐越高
+# （扩散采样的每条样本互相独立，batch 只影响吞吐、不影响采样分布）。
+# 05_probe_vram.sh 会用 nvidia-smi 轮询实测每种 batch 的峰值显存，把不 OOM 的
+# 最大值写进 $OUT/vram_profile.json；这里自动读回来，无需手工调参。
+VRAM_PROFILE="${VRAM_PROFILE:-auto}"
+if [[ "$VRAM_PROFILE" == "auto" && -f "$OUT/vram_profile.json" ]]; then
+  eval "$(VRAM_PROFILE_JSON="$OUT/vram_profile.json" "$PY" - <<'PYEOF' 2>/dev/null || true
+import json, os, shlex
+try:
+    d = json.load(open(os.environ["VRAM_PROFILE_JSON"]))
+except Exception:
+    raise SystemExit(0)
+for k in ("DIFFUSION_BATCH_SIZE", "CROP_SIZE", "MAX_ATOMS_IN_CROP",
+          "DIFFUSION_BS_TRAIN", "N_EXAMPLES", "NUM_WORKERS"):
+    if d.get(k) not in (None, ""):
+        print(f"export {k}={shlex.quote(str(d[k]))}")
+PYEOF
+)"
+fi
+
+# 论文默认 diffusion_batch_size=8。A6000 48 GB 上实测能开到 32 甚至更高
+# （见 05_probe_vram.sh 的结果）；要与论文数字严格对齐就保持 8。
 DIFFUSION_BATCH_SIZE="${DIFFUSION_BATCH_SIZE:-8}"
+# 训练侧的显存三件套（NMF / LoRA 微调用，与论文默认一致）
+CROP_SIZE="${CROP_SIZE:-256}"
+MAX_ATOMS_IN_CROP="${MAX_ATOMS_IN_CROP:-1920}"
+DIFFUSION_BS_TRAIN="${DIFFUSION_BS_TRAIN:-4}"
+# 每 epoch 训练样本数（NMF sweep 用）
+N_EXAMPLES="${N_EXAMPLES:-128}"
+# DataLoader 进程数 / 预取。cif 在 /dev/shm 上时，worker 越多越能喂满 GPU；
+# 32 核机器上 8-12 个 worker 通常是甜点。
+NUM_WORKERS="${NUM_WORKERS:-8}"
+PREFETCH="${PREFETCH:-4}"
 # 论文用 2 次 recycle（checkpoint 默认）；显存够也可以留着。
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+# bf16 已经是 trainer 默认（configs/trainer/rfd3_base.yaml: precision=bf16-mixed），
+# A6000 是 Ampere，bf16 有原生张量核支持 —— 保持默认即可。
+export TORCH_CUDA_ARCH_LIST="${TORCH_CUDA_ARCH_LIST:-8.6}"   # A6000 = sm_86
 
 # ------------------------------------------------------------ 论文采样参数 ---
 # 论文 Fig. S4 脚注："step scale η = 1.5, noise level γ0 = 0.6, 200 denoising steps"
@@ -193,9 +308,27 @@ FOLD_PARALLEL_GPUS="${FOLD_PARALLEL_GPUS:-$MAX_PARALLEL_GPUS}"
 # 汇总报告语言
 REPORT_LANG="${REPORT_LANG:-zh}"
 
+# ------------------------------------------------------------ 临时目录 ---
+# ⚠️ 长跑必设。torch 的 file_descriptor 共享策略会在 $TMPDIR 下建 unix socket
+#    （$TMPDIR/pymp-xxxx），而 DataLoader worker 每 epoch 被信号杀死时这些目录
+#    不会被清理 —— 每个 worker 每 epoch 泄漏一个目录。小 tmpfs 的 /tmp 几百
+#    epoch 后必然写满，随后报：
+#        OSError: [Errno 28] No space left on device: '/tmp/pymp-xxxx'
+#    之后 batch 不再送达、主进程可能永久阻塞（看起来像"卡住"）。
+#    这里把 TMPDIR 固定到产物盘（通常几百 GB），不要放在 /tmp。
+TMPDIR="${TMPDIR:-$OUT/_worker_tmp}"
+mkdir -p "$TMPDIR" 2>/dev/null || true
+export TMPDIR
+# PERSISTENT_WORKERS=1 时 worker 不再每 epoch 重生（fabric.fit 只建一个 DataLoader，
+# epoch 循环复用），从根上堵住上面的泄漏。代价是首 epoch 稍慢一点。
+PERSISTENT_WORKERS="${PERSISTENT_WORKERS:-1}"
+export PERSISTENT_WORKERS
+
 # ------------------------------------------------------------ 目录初始化 ---
 mkdir -p "$INPUTS_DIR" "$LOGS_DIR" "$DESIGNS_DIR" "$SEQS_DIR" \
          "$FOLDS_DIR" "$METRICS_DIR" "$REPORTS_DIR" "$LOGS_DIR/gpu_pool"
 
 export PYTHONPATH="$FOUNDRY_ROOT/src:$FOUNDRY_ROOT/models/rfd3/src:$FOUNDRY_ROOT/models/rf3/src:$FOUNDRY_ROOT/models/mpnn/src:${PYTHONPATH:-}"
 export PAPER_ROOT FOUNDRY_ROOT OUT N_WORKERS GPUS MAX_PARALLEL_GPUS
+export PDB_MIRROR PDB_MIRROR_PATH CCD_MIRROR CCD_MIRROR_PATH CCD_PATH
+export RFD3_CKPT PDB_PARQUET_DIR HBPLUS_PATH

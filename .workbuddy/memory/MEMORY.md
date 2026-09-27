@@ -5,19 +5,28 @@
 | 项目 | 值 |
 |---|---|
 | 仓库根 | `/backup01/zzj/protein/foundry`（Foundry：atomworks + RFD3 + RF3 + MPNN） |
-| 运行环境 | conda env `rc` → `/home/zhangzijian/anaconda3/envs/rc/bin/{rfd3,mpnn,rf3,rfd3na,foundry}` |
-| RFD3 权重 | `/media/zzj/Data/rfd3_latest.ckpt` |
+| 本机（沙箱可见） | `zzj-laptop`：`/home/zzj/protein/foundry`；`/media/zzj/Data/*` 可读，**`/backup01` 与 `/dev/shm` 数据不可见** |
+| 运行环境 | conda env `rc` → `/home/zhangzijian/anaconda3/envs/rc/bin/{rfd3,mpnn,rf3,rfd3na,foundry}`；服务器上是 `/backup01/zzj/rc-cu128/bin/python` |
+| 权重与数据（服务器） | `/dev/shm/pdb_metadata_latest/`（`rfd3_latest.ckpt` + 两个 parquet）、`/dev/shm/pdb_mirror`（82 GB / 250,359 cif.gz）、`/dev/shm/ccd_mirror`（1.7 GB） |
+| 权重（本机） | `/media/zzj/Data/{rfd3_latest.ckpt, pdb_mirror, pdb_metadata_latest, ccd_mirror}` |
+| Path 探测 | `experiments/paper_rfd3/env.sh` 的 `_pick_dir`/`_pick_file` 自动选，**两边共用一份脚本**；加机器就加候选路径 |
 | HBPLUS | `/home/zhangzijian/protein/HBPLUS/hbplus/hbplus`（已写进 `foundry/.env` 的 `HBPLUS_PATH`） |
 | TMalign | `/usr/bin/TMalign` |
-| GPU | 单卡约 11.5 GiB；显存紧张，长跑前先 `SAMPLES=1` 试水 |
+| GPU | **2026-09-27 起只有 1 张 RTX A6000 49 GB 可用（GPU 3）**；早前的 "11.5 GiB" 与 "6×A6000" 记录均已过时 |
 
 ## 约定
 
 - **CLI 风格**：`rfd3` / `rf3` 用 hydra 风格 `arg=value`；`mpnn` 是 argparse 风格
   `--arg value`。别混。
-- **省显存三件套**：`low_memory_mode=True`、`diffusion_batch_size<=4`、
-  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`。总样本数由 `n_batches` 控制，
-  减小 batch 不改科学口径。
+- **显存调优（单卡正解）**：`experiments/paper_rfd3/05_probe_vram.sh` 递进实测峰值显存，
+  结果写 `$OUT/vram_profile.json`，`env.sh` 自动读回。推理 batch 只影响吞吐、
+  **不改采样分布**，可以放心顶到不 OOM；**训练 batch 改了就 baseline 与各变体必须同值**。
+  单卡手册见 `experiments/paper_rfd3/SERVER_SINGLE_GPU.md`。
+- **省显存三件套**（只在显存确实不够时用）：`low_memory_mode=True`、
+  `diffusion_batch_size<=4`、`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`。
+  总样本数由 `n_batches` 控制，减小 batch 不改科学口径。49 GB 卡不需要降级。
+- **`env.sh` / `lib.sh` 带 `set -Eeuo pipefail`，会被 `source` 继承** ——
+  探测类脚本（要容忍单点 OOM）必须在 source 之后显式 `set +e`。
 - **论文口径采样参数**（别再凭感觉调）：η=`step_scale`=1.5、γ0=`gamma_0`=0.6、
   `num_timesteps`=200；小分子 diffused-ligand 另加 CFG=2.0。
 - 官方文档给 PPI 的生产推荐 `step_scale=3, gamma_0=0.2` 与论文 benchmark 口径不同。
@@ -85,6 +94,22 @@
 - **镜像里可用的 CPU 工具栈**（沙箱排查用）：`/home/zzj/.workbuddy/tmp/wb_torch`（torch CPU、
   pandas、matplotlib）、`wb_torch2`、`wb_tools`（pyflakes）、`wb_hydra`（hydra-core，
   可 `initialize_config_dir("models/rfd3/configs")` + `compose(...)` 验证 override 合法）。
+- **训练数据是"parquet 索引 + 镜像"两件套，`path` 列被忽略**：
+  `InterfacesDFParser` / `PNUnitsDFParser` 用模板
+  `{base_dir}/{pdb_id[1:3]}/{pdb_id}.cif.gz` 自己拼路径（`path_template` 默认值），
+  parquet 里的 `path` 列根本不读。→ 想缩训练集就**同时裁 parquet 的行 + 裁镜像**，
+  两边一致即可（工具：`experiments/paper_rfd3/04_training_subset.py`）。
+  但 `calculate_weights_for_pdb_dataset_df` 会在子集内重算 cluster size，
+  采样权重随之变化 —— baseline 与各变体同子集才可比，绝对 lDDT 不能跨集比。
+- **规模数字（2026-09-27 实测）**：`interfaces_df.parquet` 687.5 万行 / 训练 filters 后
+  563 万行 / 195,296 pdb_id；`pn_units_df.parquet` 381 万 → 326 万 / 220,496 pdb_id。
+  镜像 250,359 cif.gz / 82 GB，平均 337 KB/文件。holdout `evaluation_manifest.csv`
+  256 行 = **73 个 unique pdb_id**（14 MB）。→ **论文 §3 全量训练集 ≈ 75 GB ≈ 全库，
+  但微调只需按采样量裁一个小集**。
+- **`pd.read_parquet` 读全列会 OOM**：`interfaces_df` 60 列 / 687 万行（大量 string 列），
+  整表读入会被 SIGKILL（`rc=137`）。按训练配置的 `columns_to_load` 只读 18 列。
+- **`nvidia-smi` 驱动故障时把错误写到 stdout**（不是 stderr），`2>/dev/null` 挡不住，
+  会被当成显存数值做算术 → bash 报 `rc=9` 神秘退出。取值必须 `[[ $x =~ ^[0-9]+$ ]]`。
 - 详细排错手册见用户级 skill `foundry-rfd3-eval-debug`（2026-09-25 建）。
 
 ## 目录

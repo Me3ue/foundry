@@ -25,6 +25,18 @@ ONLY="${ONLY:-1 2 3 4 5 6 7 8 9}"
 START=$(date +%s)
 check_env
 
+# 显存档位来自 05_probe_vram.sh 的实测结果；没做过就提示一下
+if [[ ! -f "$OUT/vram_profile.json" ]]; then
+  hdr "提示：还没做过显存探测"
+  warn "当前用手册默认 batch（推理=$DIFFUSION_BATCH_SIZE，训练=$DIFFUSION_BS_TRAIN）。"
+  warn "单卡想把显存吃满、显著缩短墙钟，先跑一次（20-40 分钟，只做一次）："
+  warn "    GPU_ID=<你的卡> ./05_probe_vram.sh"
+  warn "它会实测峰值显存并把最优值写进 \$OUT/vram_profile.json，之后自动生效。"
+  warn "详见 SERVER_SINGLE_GPU.md"
+else
+  ok "已加载显存档位（$OUT/vram_profile.json）"
+fi
+
 hdr "步骤 0：从仓库配置里导出论文 benchmark 定义"
 "$PY" 02_extract_repo_benchmarks.py || warn "benchmark 导出失败（PPI 会退回 tutorial 结构）"
 
