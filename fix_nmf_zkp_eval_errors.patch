@@ -1,0 +1,498 @@
+diff --git a/models/rfd3/scripts/plot_nmf_zkp_pdb_metrics.py b/models/rfd3/scripts/plot_nmf_zkp_pdb_metrics.py
+index 6511446..3e929bf 100644
+--- a/models/rfd3/scripts/plot_nmf_zkp_pdb_metrics.py
++++ b/models/rfd3/scripts/plot_nmf_zkp_pdb_metrics.py
+@@ -20,6 +20,27 @@ COLORS = {
+ }
+ COLOR_CYCLE = ["#0072B2", "#009E73", "#D55E00", "#CC79A7", "#E69F00", "#56B4E9", "#F0E442"]
+ 
++# The validation callback logs `val/<dataset>/<metric>.<key>`, where `<metric>`
++# comes from the metrics registry (here `lddt`), so the plain `mean_lddt` key is
++# only a legacy alias. Accept every plausible spelling.
++KEY_ALIASES = {
++    "val/pdb_holdout/mean_lddt": (
++        "val/pdb_holdout/lddt.mean_lddt_protein",
++        "val/pdb_holdout/lddt.mean_lddt",
++        "val/mean_lddt",
++    ),
++}
++
++
++def resolve_key(df: pd.DataFrame, key: str) -> str | None:
++    """Return the first column in `df` that corresponds to the requested key."""
++    if key in df.columns:
++        return key
++    for alias in KEY_ALIASES.get(key, ()):
++        if alias in df.columns:
++            return alias
++    return None
++
+ 
+ def ordered_tags(metrics: dict[str, pd.DataFrame]) -> list[str]:
+     discovered = list(metrics)
+@@ -124,9 +145,12 @@ def plot_curves(metrics: dict[str, pd.DataFrame], fig_dir: Path) -> list[Path]:
+         any_series = False
+         for index, tag in enumerate(ordered_tags(metrics)):
+             df = metrics.get(tag)
+-            if df is None or key not in df.columns:
++            if df is None:
++                continue
++            column = resolve_key(df, key)
++            if column is None:
+                 continue
+-            y = pd.to_numeric(df[key], errors="coerce")
++            y = pd.to_numeric(df[column], errors="coerce")
+             x = pd.to_numeric(df.get("epoch", df.get("step")), errors="coerce")
+             mask = y.notna() & x.notna()
+             if not mask.any():
+@@ -159,9 +183,12 @@ def plot_curves(metrics: dict[str, pd.DataFrame], fig_dir: Path) -> list[Path]:
+     for ax, (key, ylabel, higher_better) in zip(axes.ravel(), combo_keys):
+         for index, tag in enumerate(ordered_tags(metrics)):
+             df = metrics.get(tag)
+-            if df is None or key not in df.columns:
++            if df is None:
++                continue
++            column = resolve_key(df, key)
++            if column is None:
+                 continue
+-            y = pd.to_numeric(df[key], errors="coerce")
++            y = pd.to_numeric(df[column], errors="coerce")
+             x = pd.to_numeric(df.get("epoch", df.get("step")), errors="coerce")
+             mask = y.notna() & x.notna()
+             if not mask.any():
+@@ -206,7 +233,12 @@ def write_tables(sweep_dir: Path, metrics: dict[str, pd.DataFrame], ckpt: str) -
+                 "best_train_lddt": best_numeric(df, "train/per_epoch_mean_lddt_protein", True),
+                 "final_seq_recovery": last_numeric(df, "train/per_epoch_seq_recovery"),
+                 "final_mse": last_numeric(df, "train/per_epoch_mse_loss_mean"),
+-                "holdout_lddt": last_numeric(df, "val/pdb_holdout/mean_lddt", "val/mean_lddt"),
++                "holdout_lddt": last_numeric(
++                    df,
++                    "val/pdb_holdout/lddt.mean_lddt_protein",
++                    "val/pdb_holdout/mean_lddt",
++                    "val/mean_lddt",
++                ),
+             }
+         )
+     csv_path = sweep_dir / "paper_metrics.csv"
+diff --git a/models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh b/models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
+index 94eaff8..693c23f 100755
+--- a/models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
++++ b/models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh
+@@ -43,9 +43,21 @@ PDB_MIRROR="${PDB_MIRROR:-/dev/shm/pdb_mirror}"
+ # AtomWorks resolves the chemical component dictionary through this environment variable.
+ export CCD_MIRROR_PATH="${CCD_MIRROR_PATH:-/dev/shm/ccd_mirror}"
+ export CCD_PATH="${CCD_PATH:-/dev/shm/ccd_mirror}"
+-# H-bond featurization (calculate_hbonds=0.2) shells out to HBPLUS. The binary
+-# on this machine lives under /root, not the old /home/zhangzijian path baked into env.
+-export HBPLUS_PATH="${HBPLUS_PATH:-/root/protein/HBPLUS/hbplus/hbplus}"
++# H-bond featurization (calculate_hbonds > 0) shells out to HBPLUS. Pick the
++# first binary that actually exists instead of trusting a hard-coded path: the
++# checked-in `.env` points at $HOME/protein, while older notes mention /root.
++if [[ -z "${HBPLUS_PATH:-}" ]]; then
++  for _hbplus_candidate in \
++    "${HOME:-/home/zzj}/protein/HBPLUS/hbplus/hbplus" \
++    "/root/protein/HBPLUS/hbplus/hbplus"; do
++    if [[ -x "${_hbplus_candidate}" ]]; then
++      HBPLUS_PATH="${_hbplus_candidate}"
++      break
++    fi
++  done
++  HBPLUS_PATH="${HBPLUS_PATH:-${HOME:-/home/zzj}/protein/HBPLUS/hbplus/hbplus}"
++fi
++export HBPLUS_PATH
+ # GPU 2 is currently idle on the supplied machine. Override with GPU=4 if
+ # another free A6000 is preferred; do not use busy GPUs 0, 1, 3, or 5.
+ GPU="${GPU:-2}"
+@@ -127,6 +139,15 @@ COMMON_OVERRIDES=(
+   "dataloader.train.dataloader_params.prefetch_factor=${PREFETCH:-2}"
+ )
+ 
++# Escape hatch for extra hydra overrides applied to every job, e.g. a fast
++# evaluation-only smoke test that trains for zero steps and only runs the
++# holdout pass:
++#   MAX_EPOCHS=1 EXTRA_OVERRIDES="datasets.val.pdb_holdout.max_examples=4" ...
++if [[ -n "${EXTRA_OVERRIDES:-}" ]]; then
++  # shellcheck disable=SC2206
++  COMMON_OVERRIDES+=(${EXTRA_OVERRIDES})
++fi
++
+ LAYER_SET="${LAYER_SET:-encoder}"
+ LAYER="${LAYER:-}"
+ 
+@@ -165,6 +186,14 @@ layer_jobs_for() {
+ 
+ JOBS=()
+ if [[ "${INCLUDE_BASELINE}" == "1" ]]; then
++  # NOTE: no NMF/LoRA injection and no parameter_freezing_config is set here, so
++  # every RFD3 parameter (~168M) stays trainable. This baseline is therefore a
++  # FULL FINE-TUNE of the released checkpoint, not a frozen-pretrained baseline.
++  # To evaluate the untouched checkpoint instead, use the zero-step trick
++  # (trainer.max_epochs=1 still runs the post-fit holdout pass) or apply
++  #   EXTRA_OVERRIDES="+ckpt_config.parameter_freezing_config.freeze_by_default=true"
++  # (a fully frozen model yields a loss without grad_fn, so it cannot go through
++  # training_step/backward -- that combination only works with zero train steps).
+   JOBS+=("baseline|nmf_zkp_pdb|name=baseline +nmf.enabled=false ckpt_config.path=${CKPT} ckpt_config.reset_optimizer=true")
+ fi
+ 
+diff --git a/models/rfd3/src/rfd3/metrics/hbonds_metrics.py b/models/rfd3/src/rfd3/metrics/hbonds_metrics.py
+index f680bc0..27108f5 100644
+--- a/models/rfd3/src/rfd3/metrics/hbonds_metrics.py
++++ b/models/rfd3/src/rfd3/metrics/hbonds_metrics.py
+@@ -15,6 +15,9 @@ from rfd3.transforms.hbonds import (
+     add_hydrogen_atom_positions,
+     calculate_hbonds,
+ )
++# `is_motif_atom` is needed to extend the h-bond acceptor selection to motif
++# atoms; the annotation originates from the conditioning features.
++from rfd3.transforms.conditioning_base import get_motif_features
+ 
+ from foundry.metrics.base import Metric
+ from foundry.utils.ddp import RankedLogger
+diff --git a/models/rfd3/src/rfd3/metrics/losses.py b/models/rfd3/src/rfd3/metrics/losses.py
+index 63e9688..241e0ab 100644
+--- a/models/rfd3/src/rfd3/metrics/losses.py
++++ b/models/rfd3/src/rfd3/metrics/losses.py
+@@ -42,8 +42,16 @@ class SequenceLoss(nn.Module):
+         sequence_indices_I = sequence_indices_I[valid_t]
+         recovery = (sequence_indices_I == gt_seq).float()  # (V, L)
+         recovery = recovery[order]  # reorder by t
+-        recovery = recovery[..., (w_seq > 0).bool()]  # [V, L_valid]
+-        lowest_t_rec = recovery[0].mean()  # scalar
++        if int((w_seq > 0).sum()) == 0:
++            # No supervised position in the crop (all residues unknown);
++            # `mean()` over an empty selection would be NaN.
++            recovery = torch.zeros(
++                n_valid_t, device=sequence_indices_I.device, dtype=recovery.dtype
++            )
++            lowest_t_rec = recovery[0]
++        else:
++            recovery = recovery[..., (w_seq > 0).bool()]  # [V, L_valid]
++            lowest_t_rec = recovery[0].mean()  # scalar
+ 
+         outs = {
+             "token_lvl_sequence_loss": token_loss.mean().detach(),
+@@ -93,7 +101,14 @@ class DiffusionLoss(nn.Module):
+     def forward(self, network_input, network_output, loss_input):
+         X_L = network_output["X_L"]  # D, L, 3
+         D = X_L.shape[0]
+-
++        # The resolved-atom mask is stored at atom level ([L]); expand it over
++        # the diffusion batch so it broadcasts against X_L ([D, L, 3]). Tolerate
++        # an already batched ([1, L] / [D, L]) mask for non-PDB callers.
++        crd_mask_L = loss_input["crd_mask_L"]
++        if crd_mask_L.ndim == 1:
++            crd_mask_L = crd_mask_L.unsqueeze(0).expand(D, -1)
++        elif crd_mask_L.shape[0] == 1 and D > 1:
++            crd_mask_L = crd_mask_L.expand(D, -1)
+         tok_idx = network_input["f"]["atom_to_token_map"]
+         t = network_input["t"]  # (D,)
+         is_original_unindexed_token = loss_input["is_original_unindexed_token"][tok_idx]
+@@ -186,8 +201,14 @@ class DiffusionLoss(nn.Module):
+             lddt_loss_dict = {}
+             l_total = l_mse_total
+         # ... Return additional losses
+-        t, indices = torch.sort(t)
+-        l_mse_low, l_mse_high = torch.split(l_global[indices], [D // 2, D - D // 2])
++        if D < 2:
++            # A single diffusion sample cannot be split into low/high-t halves;
++            # `torch.split(x, [0, 1])` yields an empty tensor and `mean()` of it
++            # is NaN, which then leaks into the logged metrics.
++            l_mse_low = l_mse_high = l_global
++        else:
++            _, indices = torch.sort(t)
++            l_mse_low, l_mse_high = torch.split(l_global[indices], [D // 2, D - D // 2])
+         loss_dict = {
+             "mse_loss_mean": l_mse_total,
+             "mse_loss_low_t": l_mse_low,
+@@ -305,16 +326,25 @@ def smoothed_lddt_loss(
+                 mask = mask.to(pair_mask.dtype)
+                 if mask.ndim > 1:
+                     mask = mask[0]
+-                mask = (mask[first_index] * mask[second_index])[None].expand(
++                selected = (mask[first_index] * mask[second_index])[None].expand(
+                     pair_mask.shape[0], -1
+                 )
+-                mask = (mask * pair_mask).to(bool)
+-                return (
+-                    (1 - torch.sum(lddt_[:, mask[0]] * scale, dim=(1)))
+-                    .mean()
+-                    .detach()
+-                    .cpu()
++                selected = (selected * pair_mask).to(torch.bool)
++                # ``lddt_`` is normalized by the *total* number of pairs, so a
++                # subset sum is only a fraction of the all-pairs lDDT. That made
++                # every subset column (dna / rna / protein-on-a-complex, i.e.
++                # anything whose pairs are not all pairs) report roughly
++                # ``n_subset_pairs / n_pairs`` times its true value. Renormalize
++                # by the number of selected pairs and report NaN when the subset
++                # is empty (e.g. no DNA in a protein-only structure).
++                n_selected = int(selected[0].sum())
++                if n_selected == 0:
++                    return torch.tensor(float("nan"))
++                n_total = torch.sum(pair_mask[0])
++                subset_lddt = (
++                    torch.sum(lddt_[:, selected[0]], dim=(1)) * n_total / n_selected
+                 )
++                return (1 - subset_lddt * scale).mean().detach().cpu()
+ 
+             extra_lddts = {}
+             extra_lddts["mean_lddt"] = filter_lddt(
+diff --git a/models/rfd3/src/rfd3/train_lora.py b/models/rfd3/src/rfd3/train_lora.py
+index 0160c92..97876ce 100755
+--- a/models/rfd3/src/rfd3/train_lora.py
++++ b/models/rfd3/src/rfd3/train_lora.py
+@@ -50,6 +50,23 @@ def _unwrap_model(model):
+     return model
+ 
+ 
++def _unwrap_for_parameter_count(model):
++    """Unwrap Fabric / EMA wrappers down to the module that owns the weights.
++
++    ``EMA`` keeps a full copy of the model in its ``shadow`` submodule, so
++    counting parameters on the EMA itself reports roughly twice the real model
++    size (and halves the reported trainable fraction).
++    """
++    for _ in range(4):  # fabric wrapper -> EMA -> model
++        if hasattr(model, "module"):
++            model = model.module
++        elif hasattr(model, "shadow") and hasattr(model, "model"):
++            model = model.model
++        else:
++            break
++    return model
++
++
+ def _import_lora_utils() -> tuple[Callable, Callable]:
+     try:
+         from rfd3.lora import inject_lora_into_model, count_trainable_parameters
+@@ -295,6 +312,7 @@ def _directory_size_bytes(path: Path | None) -> int | None:
+     return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+ 
+ 
++def _get_run_summary_path(cfg: DictConfig, trainer) -> Path:
+     log_dir = Path(cfg.paths.log_dir)
+     run_name = str(getattr(cfg, "name", "run"))
+     global_step = trainer.state.get("global_step", None)
+@@ -345,6 +363,82 @@ def _last_float(rows: list[dict[str, str]], *keys: str):
+     return last
+ 
+ 
++def _preferred_lddt_key(
++    rows: list[dict[str, str]], prefix: str = "val/"
++) -> str | None:
++    """Resolve the logged lDDT column name for the given prefix.
++
++    The validation metrics callback logs ``val/<dataset>/<metric>.<key>`` (for
++    example ``val/pdb_holdout/lddt.mean_lddt_protein``), so the summary must not
++    depend on one hard-coded key. Protein-restricted lDDT is preferred.
++    """
++    if not rows:
++        return None
++    keys = [key for key in rows[-1].keys() if key]
++    if f"{prefix}mean_lddt" in keys:
++        return f"{prefix}mean_lddt"
++    candidates = sorted(
++        (
++            key
++            for key in keys
++            if key.startswith(prefix) and "lddt" in key.lower()
++        ),
++        key=lambda key: (0 if "protein" in key.lower() else 1, key),
++    )
++    return candidates[0] if candidates else None
++
++
++def _mean_lddt_from_validation_csv(path) -> float | None:
++    """Mean per-example holdout lDDT from the validation metrics CSV.
++
++    This file is the authoritative record of the holdout pass, so it is used to
++    backfill the summary independently of logger column naming.
++    """
++    if not path:
++        return None
++    csv_path = Path(path)
++    if not csv_path.exists():
++        return None
++    try:
++        import csv
++
++        with csv_path.open(newline="") as handle:
++            rows = list(csv.DictReader(handle))
++    except Exception:
++        return None
++    if not rows:
++        return None
++
++    # Keep only the most recent validation epoch, if the column is present.
++    def _epoch(row: dict[str, str]) -> float | None:
++        try:
++            return float(row.get("epoch", ""))
++        except (TypeError, ValueError):
++            return None
++
++    epochs = [e for e in (_epoch(row) for row in rows) if e is not None]
++    if epochs:
++        latest = max(epochs)
++        rows = [row for row in rows if _epoch(row) == latest]
++
++    lddt_keys = sorted(
++        (key for key in rows[-1].keys() if key and "lddt" in key.lower()),
++        key=lambda key: (0 if "protein" in key.lower() else 1, key),
++    )
++    if not lddt_keys:
++        return None
++    key = lddt_keys[0]
++    values = []
++    for row in rows:
++        try:
++            values.append(float(row.get(key, "")))
++        except (TypeError, ValueError):
++            continue
++    if not values:
++        return None
++    return sum(values) / len(values)
++
++
+ def _best_epoch_from_rows(rows: list[dict[str, str]]):
+     scored = []
+     for row in rows:
+@@ -377,7 +471,7 @@ def _write_run_summary(cfg: DictConfig, trainer, extra: dict[str, Any]) -> Path:
+     summary_path = _get_run_summary_path(cfg, trainer)
+     summary_path.parent.mkdir(parents=True, exist_ok=True)
+ 
+-    model = _unwrap_model(trainer.state["model"])
++    model = _unwrap_for_parameter_count(trainer.state["model"])
+     trainable, total = (None, None)
+     try:
+         trainable, total = (sum(p.numel() for p in model.parameters() if p.requires_grad), sum(p.numel() for p in model.parameters()))
+@@ -664,9 +758,15 @@ def train(cfg: DictConfig) -> None:
+         metrics = _collect_metrics()
+         metrics_csv, csv_rows = _scan_metrics_csv(Path(cfg.paths.log_dir))
+         has_validation = val_loaders is not None
++        if has_validation:
++            # The metrics callback logs e.g. `val/pdb_holdout/lddt.mean_lddt_protein`;
++            # resolve the concrete column instead of assuming one key name.
++            val_lddt_key = _preferred_lddt_key(csv_rows) or "val/mean_lddt"
++        else:
++            val_lddt_key = "train/per_epoch_mean_lddt_protein"
+         if metrics_csv is not None:
+             summary_payload["metrics_csv"] = str(metrics_csv)
+-            metric_lddt_key = "val/mean_lddt" if has_validation else "train/per_epoch_mean_lddt_protein"
++            metric_lddt_key = val_lddt_key
+             metric_loss_key = "val/total_loss" if has_validation else "train/per_epoch_total_loss"
+             csv_best_lddt = _last_float(csv_rows, metric_lddt_key)
+             csv_best_loss = _last_float(csv_rows, metric_loss_key)
+@@ -678,7 +778,7 @@ def train(cfg: DictConfig) -> None:
+             except Exception:
+                 csv_final_epoch = current_epoch
+             csv_final_loss = _last_float([final_row], "val/total_loss", "train/per_epoch_total_loss") if final_row else None
+-            csv_final_lddt = _last_float([final_row], "val/mean_lddt", "train/per_epoch_mean_lddt_protein") if final_row else None
++            csv_final_lddt = _last_float([final_row], val_lddt_key, "train/per_epoch_mean_lddt_protein") if final_row else None
+             if has_validation:
+                 if csv_best_lddt is not None:
+                     metrics["val/mean_lddt"] = csv_best_lddt
+@@ -690,6 +790,15 @@ def train(cfg: DictConfig) -> None:
+             summary_payload["final_epoch"] = csv_final_epoch
+             summary_payload["final_epoch_loss"] = csv_final_loss
+             summary_payload["final_epoch_lddt"] = csv_final_lddt
++        if has_validation:
++            # Backfill the holdout lDDT from the per-example validation CSV so
++            # run_summary.json always carries the holdout number, whatever the
++            # logger called the column.
++            holdout_lddt = _mean_lddt_from_validation_csv(
++                getattr(trainer, "validation_results_path", None)
++            )
++            if holdout_lddt is not None:
++                metrics["val/mean_lddt"] = holdout_lddt
+         summary_payload["metrics"] = metrics
+         if has_validation:
+             summary_payload["best_val_lddt"] = metrics.get("val/mean_lddt")
+diff --git a/models/rfd3na/src/rfd3na/metrics/hbonds_metrics.py b/models/rfd3na/src/rfd3na/metrics/hbonds_metrics.py
+index a7be731..3c9916b 100644
+--- a/models/rfd3na/src/rfd3na/metrics/hbonds_metrics.py
++++ b/models/rfd3na/src/rfd3na/metrics/hbonds_metrics.py
+@@ -15,6 +15,9 @@ from rfd3na.transforms.hbonds import (
+     add_hydrogen_atom_positions,
+     calculate_hbonds,
+ )
++# `is_motif_atom` is needed to extend the h-bond acceptor selection to motif
++# atoms; the annotation originates from the conditioning features.
++from rfd3na.transforms.conditioning_base import get_motif_features
+ 
+ from foundry.metrics.base import Metric
+ from foundry.utils.ddp import RankedLogger
+diff --git a/models/rfd3na/src/rfd3na/metrics/losses.py b/models/rfd3na/src/rfd3na/metrics/losses.py
+index 5be38ff..9b6c218 100644
+--- a/models/rfd3na/src/rfd3na/metrics/losses.py
++++ b/models/rfd3na/src/rfd3na/metrics/losses.py
+@@ -42,8 +42,16 @@ class SequenceLoss(nn.Module):
+         sequence_indices_I = sequence_indices_I[valid_t]
+         recovery = (sequence_indices_I == gt_seq).float()  # (V, L)
+         recovery = recovery[order]  # reorder by t
+-        recovery = recovery[..., (w_seq > 0).bool()]  # [V, L_valid]
+-        lowest_t_rec = recovery[0].mean()  # scalar
++        if int((w_seq > 0).sum()) == 0:
++            # No supervised position in the crop (all residues unknown);
++            # `mean()` over an empty selection would be NaN.
++            recovery = torch.zeros(
++                n_valid_t, device=sequence_indices_I.device, dtype=recovery.dtype
++            )
++            lowest_t_rec = recovery[0]
++        else:
++            recovery = recovery[..., (w_seq > 0).bool()]  # [V, L_valid]
++            lowest_t_rec = recovery[0].mean()  # scalar
+ 
+         outs = {
+             "token_lvl_sequence_loss": token_loss.mean().detach(),
+@@ -187,8 +195,16 @@ class DiffusionLoss(nn.Module):
+             lddt_loss_dict = {}
+             l_total = l_mse_total
+         # ... Return additional losses
+-        t, indices = torch.sort(t)
+-        l_mse_low, l_mse_high = torch.split(l_global[indices], [D // 2, D - D // 2])
++        if D < 2:
++            # A single diffusion sample cannot be split into low/high-t halves;
++            # `torch.split(x, [0, 1])` yields an empty tensor and `mean()` of it
++            # is NaN, which then leaks into the logged metrics.
++            l_mse_low = l_mse_high = l_global
++        else:
++            _, indices = torch.sort(t)
++            l_mse_low, l_mse_high = torch.split(
++                l_global[indices], [D // 2, D - D // 2]
++            )
+         loss_dict = {
+             "mse_loss_mean": l_mse_total,
+             "mse_loss_low_t": l_mse_low,
+@@ -292,16 +308,25 @@ def smoothed_lddt_loss(
+                 mask = mask.to(pair_mask.dtype)
+                 if mask.ndim > 1:
+                     mask = mask[0]
+-                mask = (mask[first_index] * mask[second_index])[None].expand(
++                selected = (mask[first_index] * mask[second_index])[None].expand(
+                     pair_mask.shape[0], -1
+                 )
+-                mask = (mask * pair_mask).to(bool)
+-                return (
+-                    (1 - torch.sum(lddt_[:, mask[0]] * scale, dim=(1)))
+-                    .mean()
+-                    .detach()
+-                    .cpu()
++                selected = (selected * pair_mask).to(torch.bool)
++                # ``lddt_`` is normalized by the *total* number of pairs, so a
++                # subset sum is only a fraction of the all-pairs lDDT. That made
++                # every subset column (dna / rna / protein-on-a-complex, i.e.
++                # anything whose pairs are not all pairs) report roughly
++                # ``n_subset_pairs / n_pairs`` times its true value. Renormalize
++                # by the number of selected pairs and report NaN when the subset
++                # is empty (e.g. no DNA in a protein-only structure).
++                n_selected = int(selected[0].sum())
++                if n_selected == 0:
++                    return torch.tensor(float("nan"))
++                n_total = torch.sum(pair_mask[0])
++                subset_lddt = (
++                    torch.sum(lddt_[:, selected[0]], dim=(1)) * n_total / n_selected
+                 )
++                return (1 - subset_lddt * scale).mean().detach().cpu()
+ 
+             extra_lddts = {}
+             extra_lddts["mean_lddt"] = filter_lddt(
