@@ -1,0 +1,30 @@
+{
+  "paper_reference": {
+    "exp1_unconditional": {
+      "metric": "designability@1.5A (AF3, 8 MPNN seqs)",
+      "paper": "98% of designs have >=1 sequence folding within 1.5 A"
+    },
+    "exp2_ppi": {
+      "metric": "AF3 pass rate (min PAE<=1.5 & binder pTM>=0.8 & RMSD<2.5A)",
+      "paper": "RFD3 \u4f18\u4e8e RFD1 \u7684 4/5 \u4e2a\u9776\u70b9\uff1b\u805a\u7c7b(TM 0.6)\u540e 5/5\uff1b\u5e73\u5747 8.2 vs 1.4 \u4e2a\u6210\u529f\u7c07"
+    },
+    "exp3_dna": {
+      "metric": "DNA-aligned protein C\u03b1 RMSD < 5 A \u901a\u8fc7\u7387",
+      "paper": "\u5355\u4f53 8.67%\uff1b\u4e8c\u4f53 6.67%\uff08rigid/diffused \u4e24\u8bbe\u7f6e\u5e73\u5747\uff09"
+    },
+    "exp4_small_molecule": {
+      "metric": "AF3 pass rate (bb RMSD<=1.5 & lig RMSD<=5 & PAE<=1.5 & ipTM>=0.8)",
+      "paper": "RFD3 \u5728 4/4 \u914d\u4f53\u4e0a\u4f18\u4e8e RFdiffusionAA\uff08rigid \u914d\u4f53\uff09"
+    },
+    "exp5_enzyme_ame": {
+      "metric": "\u6bcf\u6848\u4f8b 100 \u9aa8\u67b6 \u00d7 8 LigandMPNN \u5e8f\u5217\uff1bChai-1 \u7684 5 \u4e2a diffusion sample \u4e2d\u81f3\u5c11 1 \u4e2a\u6ee1\u8db3 motif \u5168\u539f\u5b50 RMSD<1.5\u00c5 \u4e14\u914d\u4f53\u4e0e\u9aa8\u67b6\u65e0 clash",
+      "paper": "41 \u4e2a AME \u6848\u4f8b\u4e2d 37 \u4e2a\u4f18\u4e8e RFD2 (90%)\uff1b>4 residue islands: 15% vs 4%\uff1b\u534f\u8bae\u89c1 RFdiffusion2 \u8bba\u6587 (Nat Methods 2025) \u7684 AME benchmark \u4e00\u8282"
+    },
+    "exp7_conditioning": {
+      "metric": "\u6c22\u952e\u6bd4\u4f8b",
+      "paper": "\u5c0f\u5206\u5b50 26.67% -> 32.67% (hbond \u6761\u4ef6) -> 36.67% (\u518d\u52a0 CFG)"
+    }
+  },
+  "n_designs": 0,
+  "conditions": {}
+}

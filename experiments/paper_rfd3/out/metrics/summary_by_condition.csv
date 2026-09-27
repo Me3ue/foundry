@@ -1,0 +1,1 @@
+experiment,condition,n_designs,n_scored,n_pass,pass_rate,pass_rate_5A_dna,mean_min_pae,mean_ptm,mean_iptm,mean_backbone_rmsd,mean_ligand_rmsd,mean_target_aligned_binder_rmsd,mean_dna_aligned_protein_rmsd,mean_motif_all_atom_rmsd,mean_ligand_rasa,mean_n_hbonds,mean_n_clashes

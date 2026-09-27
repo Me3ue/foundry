@@ -14,10 +14,26 @@
 > 📄 **[`DATASETS.md`](./DATASETS.md)** —— **数据集怎么获取与组织**：论文 §3 全部
 > benchmark 的输入定义其实就在 `models/rfd3/configs/datasets/val/` 里（含 holdout
 > 靶点的 PDB ID 和编号偏移）、PDB/CCD 镜像、元数据 parquet、蒸馏集、MSA、目录布局。
+>
+> 🖥️ **[`SERVER_SINGLE_GPU.md`](./SERVER_SINGLE_GPU.md)** —— **只有一张 A6000 时怎么跑**：
+> 一条命令的顺序执行方式（`run_paper_seq.sh`，带阶段断点续跑）、显存自动调优
+> （`05_probe_vram.sh`）、时间预算、单卡并行度原则、需要手工补的输入。
 
 ---
 
 ## 0. 三分钟上手
+
+**只有一张卡（A6000 等）**：直接一条命令，带阶段断点续跑，全程约 6 步
+（自检 → 探显存 → 准备输入 → 跑 9 个实验 → 指标 → 汇总）。详见
+[`SERVER_SINGLE_GPU.md`](./SERVER_SINGLE_GPU.md)。
+
+```bash
+cd /backup01/zzj/protein/foundry/experiments/paper_rfd3 && \
+GPUS=3 SINGLE_GPU=1 SCALE=quick PROBE=1 \
+./run_paper_seq.sh 2>&1 | tee paper_run_$(date +%F_%H%M).log
+```
+
+**多张卡 / 想手工分步**：
 
 ```bash
 cd /backup01/zzj/protein/foundry/experiments/paper_rfd3

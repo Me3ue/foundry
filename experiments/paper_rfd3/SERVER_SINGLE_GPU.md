@@ -1,224 +1,205 @@
-# 单张 RTX A6000 跑完全部复现任务 —— 执行手册
+# 单张 RTX A6000 跑完论文复现实验 —— 执行手册
 
-> 适用：只有 **1 张 A6000（49140 MiB）** 可用，项目在 `/backup01/zzj/protein/foundry`，
+> 适用：只有 **1 张 A6000（49140 MiB，如 GPU 3）** 可用，
+> 项目在 `/backup01/zzj/protein/foundry`，
 > 数据在 `/dev/shm/{pdb_mirror, ccd_mirror, pdb_metadata_latest}`。
 > 多卡版本见 `README.md` / `COMMANDS.md`。
 
 ---
 
-## 0. 先看结论
+## 0. 你要跑的实验 ↔ 脚本对照
 
-| 问题 | 答案 |
-|---|---|
-| 单卡能跑完全部吗？ | **骨架生成 + 序列设计 + NMF 微调：能。** 论文规模的**折叠**（7.5 万次结构预测）：不能，要数周 |
-| 时间花在哪？ | **折叠 ≫ 微调 > 骨架生成**。RFD3 采样很快，AF3/RF3/Chai-1 才是瓶颈 |
-| 单卡最大的提速手段 | ① 显存吃满（大 batch）② CPU worker 拉满 ③ 数据在 /dev/shm |
-| 建议顺序 | 探显存 → 冒烟 → **NMF 微调（你的主线）** → 论文 §3 半规模 → 折叠分批 |
+| 论文位置 | 实验 | 脚本 |
+|---|---|---|
+| §3 / Fig. S1c | 无条件单体 + η 扫描 | `10_exp1_unconditional.sh` |
+| §3.1 / Fig. 3a | 蛋白结合蛋白（PPI） | `11_exp2_ppi.sh` |
+| §3.2 / Fig. 3b | DNA 结合蛋白（rigid vs diffused） | `12_exp3_dna.sh` |
+| §3.3 / Fig. 3c | 小分子结合蛋白 | `13_exp4_small_molecule.sh` |
+| §3.4 / Fig. 3d | 酶设计 AME benchmark | `14_exp5_enzyme.sh` ⚠️ 需补输入 |
+| Fig. 2g / S6 | 对称设计 D2/C3/C5/C7 | `15_exp6_symmetry.sh` |
+| Fig. 2d/2e/2f | 氢键 / RASA / 质心条件 | `16_exp7_conditioning.sh` |
+| Fig. 1d | 推理速度标定 | `17_exp8_speed.sh` |
+| §4 / Fig. 4 | 湿实验的 in silico 部分 | `18_exp9_wetlab_insilico.sh` ⚠️ 需补 motif |
 
-实测参照（本仓库历史日志）：**L≈200 的近原生设计，`diffusion_batch_size=8` 单次约 42 秒**
-（含 ~25 秒进程启动 + 模型加载；纯采样约 8 条/15-20 秒）。这是 5070 Ti Laptop 的数字，
-A6000 更快、显存大 3 倍，实际会更好。
+实验 1-4、6-8 的输入由 `01_prepare_inputs.py` 全自动准备。
+**实验 5 需要 41 个 AME 案例定义，实验 9 需要 motif 文件** —— PDF 里没有补充方法，
+缺了会跳过（脚本会明确提示缺什么）。
 
 ---
 
-## 1. 三个提速杠杆（按性价比排序）
+## 1. 一条命令跑完全部
+
+```bash
+cd /backup01/zzj/protein/foundry/experiments/paper_rfd3 && \
+GPUS=3 SINGLE_GPU=1 SCALE=quick PROBE=1 \
+./run_paper_seq.sh 2>&1 | tee paper_run_$(date +%F_%H%M).log
+```
+
+这条命令按顺序做 6 件事：
+
+1. **环境自检** —— GPU / rfd3 / mpnn / 权重 / `/dev/shm` 数据是否就位
+2. **显存探测**（`PROBE=1`）—— 实测这张卡能开多大 batch，写进 `out/vram_profile.json`
+3. **准备输入** —— 从仓库配置导出论文 benchmark 定义 + 整理 PDB 结构
+4. **跑 9 个实验** —— 骨架采样 → 序列设计 → 折叠，逐个实验推进
+5. **几何指标** —— RMSD / 界面 / RASA / 氢键 / clash（多进程并行）
+6. **汇总报告** —— `out/reports/paper_experiments_report.md`，第一张表就是
+   「论文口径指标 | 论文报告数字 | 本次复现」三列对照
+
+跑完打印一份**实验状态表**，并告诉你还缺哪些手工输入。
+
+### 分档推进（强烈建议）
+
+单卡上不要一上来就跑论文规模。**分三次**，每次 `SCALE` 提一级：
+
+```bash
+# 第 1 次：冒烟，验证全链路通（约 1 小时）
+GPUS=3 SINGLE_GPU=1 SCALE=quick PROBE=1 ./run_paper_seq.sh
+
+# 第 2 次：半规模，指标有统计意义（约 1-3 天）
+GPUS=3 SINGLE_GPU=1 SCALE=half ./run_paper_seq.sh
+
+# 第 3 次：论文原规模（折叠单卡要数周，见 §3）
+GPUS=3 SINGLE_GPU=1 SCALE=paper WITH_FOLD=0 ./run_paper_seq.sh
+```
+
+### 分阶段跑（可断点续跑）
+
+`run_paper_seq.sh` 把流程拆成带完成标记的阶段，中断后用 `RESUME=1` 接着跑：
+
+```bash
+PHASE=sample ./run_paper_seq.sh    # 只采骨架
+PHASE=seq    ./run_paper_seq.sh    # 只做序列设计
+PHASE=fold   ./run_paper_seq.sh    # 只做折叠
+PHASE=report ./run_paper_seq.sh    # 只出指标 + 报告
+RESUME=1 ./run_paper_seq.sh        # 跳过已完成的阶段
+```
+
+单卡上「先出全部骨架、确认质量后再统一折叠」比「每个实验一路做完」更稳妥。
+
+---
+
+## 2. 三个提速杠杆（按性价比）
 
 ### 杠杆 1：把显存吃满 —— `05_probe_vram.sh`
 
-手册里的 `diffusion_batch_size=8` 是论文为了稳妥写的。扩散采样的每条样本**互相独立**，
-batch 只影响吞吐、不影响采样分布，A6000 49 GB 通常能开好几倍。
+手册里的 `diffusion_batch_size=8` 是为"小卡也能跑"写的保守值。扩散采样的每条样本
+**互相独立**，batch 只影响吞吐、**不改采样分布**，49 GB 卡上白白浪费 2/3。
 
 ```bash
-cd /backup01/zzj/protein/foundry/experiments/paper_rfd3
-source ./env.sh && source ./lib.sh
-
-# 用哪张卡（你的是 3 号）。约 20-40 分钟，会真跑若干次最小任务
-GPU_ID=3 ./05_probe_vram.sh
-
-# 只想先看会执行什么，不真跑：
-GPU_ID=3 ./05_probe_vram.sh --dry-run
+GPU_ID=3 ./05_probe_vram.sh              # 20-40 分钟，只做一次
+GPU_ID=3 ./05_probe_vram.sh --dry-run    # 先看会执行什么，不真跑
 ```
 
-它做的事：递进试 `diffusion_batch_size`（8→16→24→32→48→64→96）和训练侧的
-`(batch, crop_size, max_atoms_in_crop)`，每点用 `nvidia-smi` 轮询记录**峰值显存**，
-到第一个 OOM 停止，把推荐值写进 `$OUT/vram_profile.json`。
+递进试 `diffusion_batch_size ∈ {8,16,24,32,48,64,96}`，每点真跑一次最小 design，
+用 `nvidia-smi` 每 2 秒轮询记录**相对任务启动前的峰值增量**（卡上有别人进程也能用），
+到第一个 OOM 停。推荐值写进 `$OUT/vram_profile.json`，之后 `source ./env.sh`
+会**自动读回**，所有脚本零改动生效。
 
-之后 `source ./env.sh` 会**自动读回**这个文件，所有实验脚本无需改参数就用了最优配置：
-
-```bash
-source ./env.sh && source ./lib.sh && check_env   # 看硬件 + 加载的 batch
-```
-
-想手工覆盖就直接设环境变量，优先级更高：
-`DIFFUSION_BATCH_SIZE=24 CROP_SIZE=384 MAX_ATOMS_IN_CROP=3840 ./run_all.sh`
+手工覆盖（优先级更高）：`DIFFUSION_BATCH_SIZE=32 ./run_paper_seq.sh`
 
 ### 杠杆 2：CPU worker 拉满
 
-32 核机器上，DataLoader 的 worker 是"喂饱 GPU"的关键（尤其训练时每个 batch 都要
-做 cif 解析 + transform）。
+32 核机器上，DataLoader worker 是"喂饱 GPU"的关键（atomworks 的特征化很重）：
 
 ```bash
-NUM_WORKERS=12 PREFETCH=6 ./run_all.sh
+NUM_WORKERS=12 PREFETCH=6 ./run_paper_seq.sh
 ```
 
 序列设计 / 几何指标这类纯 CPU 阶段用 `N_WORKERS`（默认 `nproc/2`）。
 
-### 杠杆 3：数据放在 /dev/shm + TMPDIR 挪出 /tmp
+### 杠杆 3：`TMPDIR` 挪出 `/tmp`
 
-`env.sh` 已自动探测 `/dev/shm/pdb_mirror`、`/dev/shm/ccd_mirror`、`/dev/shm/pdb_metadata_latest`，
-并把 `TMPDIR` 指到 `$OUT/_worker_tmp`。
-
-⚠️ **`TMPDIR` 千万别留在 `/tmp`**：torch 的 DataLoader worker 每 epoch 会在
-`$TMPDIR` 下泄漏一个 `pymp-xxxx` 目录，小 tmpfs 几百 epoch 后写满，然后报
+⚠️ **这是长跑杀手**：torch 的 DataLoader worker 每 epoch 会在 `$TMPDIR` 下泄漏一个
+`pymp-xxxx` 目录，小 tmpfs 几百 epoch 后写满，然后报
 `OSError: [Errno 28] ... '/tmp/pymp-xxxx'`，**batch 不再送达、主进程看起来像卡住**。
-`env.sh` 已经处理，长跑时再加 `PERSISTENT_WORKERS=1`（默认已开）从根上堵住。
+
+`env.sh` 已把 `TMPDIR` 指到 `$OUT/_worker_tmp`，并默认 `PERSISTENT_WORKERS=1`
+（worker 不再每 epoch 重生，从根上堵住）。数据在 `/dev/shm` 上也已自动识别。
 
 ---
 
-## 2. 推荐执行顺序（含时间预算）
+## 3. 时间预算（单卡，粗估）
 
-### 步骤 0 —— 环境自检（1 分钟）
+| 阶段 | quick | half | paper |
+|---|---|---|---|
+| 骨架采样 | ~10 分钟 | 3-8 小时 | 6-16 小时 |
+| 序列设计（MPNN） | ~5 分钟 | 1-3 小时 | 2-6 小时 |
+| **折叠（结构预测）** | ~20 分钟 | **1-3 天** | **数周** ❌ |
+| 指标 + 汇总 | 分钟级 | 小时级 | 小时级 |
 
-```bash
-cd /backup01/zzj/protein/foundry/experiments/paper_rfd3
-source ./env.sh && source ./lib.sh
-check_env
-```
+参照：本仓库历史日志里 `diffusion_batch_size=8, n_batches=1` 的近原生 design
+单次约 **42 秒**（含 ~25 秒进程启动 + 模型加载），跑在 5070 Ti Laptop 上 ——
+A6000 更快、显存大 3 倍。
 
-会打印：GPU 表 + 可用卡数、`N_WORKERS`、RFD3/MPNN/RF3 可执行文件、权重路径、
-`/dev/shm` 数据是否就位、当前生效的 batch 与采样参数。**有任何一项是 `!` 就先解决它。**
+**结论：RFD3 采样很快，AF3/RF3 折叠才是瓶颈。** 单卡上 paper 规模的全量折叠
+（论文约 7.5 万次预测）不现实，建议：
 
-### 步骤 1 —— 探显存（20-40 分钟，只做一次）
-
-见杠杆 1。这一步的收益是剩下所有任务都省时间。
-
-### 步骤 2 —— 冒烟跑通全链路（0.5-2 小时）
-
-```bash
-SINGLE_GPU=1 SCALE=quick ./run_all.sh
-```
-
-每个条件 8 条骨架，验证 9 个实验 + 序列设计 + 折叠 + 汇总能串起来。
-产出 `out/reports/paper_experiments_report.md`（第一张表就是"论文数字 vs 本次复现"）。
-
-### 步骤 3 —— NMF 微调 sweep（你的主线，**建议优先做**）
-
-这条线不依赖 `experiments/`，脚本在 `models/rfd3/scripts/`。默认路径已经指向
-`/dev/shm`，只要覆盖几项：
-
-```bash
-cd /backup01/zzj/protein/foundry
-
-GPU=3 \
-PYTHON=/backup01/zzj/rc-cu128/bin/python \
-LOG_ROOT=/backup01/zzj/protein/foundry/logs/train_nmf_zkp_pdb \
-HBPLUS_PATH=/backup01/zzj/protein/HBPLUS/hbplus/hbplus \
-DATA=/dev/shm/pdb_metadata_latest \
-PARQUET=/dev/shm/pdb_metadata_latest \
-PDB_MIRROR=/dev/shm/pdb_mirror \
-CCD_MIRROR_PATH=/dev/shm/ccd_mirror CCD_PATH=/dev/shm/ccd_mirror \
-NUM_WORKERS=12 PREFETCH=6 \
-N_EXAMPLES=128 MAX_EPOCHS=580 SEED=42 \
-INCLUDE_BASELINE=1 LAYER_SET=encoder \
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-TMPDIR=/backup01/zzj/protein/foundry/logs/_worker_tmp \
-bash models/rfd3/scripts/run_nmf_zkp_pdb_sweep.sh 2>&1 | tee nmf_sweep.log
-```
-
-**显存吃满**：上面 `DIFFUSION_BS` / `CROP_SIZE` / `MAX_ATOMS` 没给就还是论文口径
-（4 / 256 / 1920）。按探测结果提高到 e.g. `DIFFUSION_BS=16 CROP_SIZE=384 MAX_ATOMS_IN_CROP=3840`：
-
-```bash
-DIFFUSION_BS=16 CROP_SIZE=384 MAX_ATOMS=3840 NUM_WORKERS=12 ...
-```
-
-> ⚠️ **训练 batch 与推理 batch 性质不同**：推理 batch 改了不影响结果；训练 batch
-> 改变了梯度平均，**baseline 与所有 NMF/LoRA 变体必须用同一个值**，否则对比无效。
-> 一旦定下就不要再改，中途改了就整轮重跑。
-
-`LAYER_SET` 选哪一组：`encoder`（6 个 job，输入整形层）/ `proj`（6）/ `head`（2）/
-`all`（14）。**建议先 `LAYER_SET=one LAYER=token_initializer.process_s_init.1` 单点试一轮**
-（1 个 job），确认能出 `val_metrics/validation_output_all_epochs.csv` 再铺全量。
-
-中途 kill 也能出数据：
-
-```bash
-python models/rfd3/scripts/report_partial_sweep.py \
-  --out logs/train_nmf_zkp_pdb/sweep_nmf_zkp_pdb_<STAMP>
-```
-
-### 步骤 4 —— 论文 §3 骨架生成（半规模 3-8 小时 / 全规模 1-2 天）
-
-```bash
-cd /backup01/zzj/protein/foundry/experiments/paper_rfd3
-SINGLE_GPU=1 SCALE=half WITH_SEQ=1 WITH_FOLD=0 ./run_all.sh
-```
-
-**先 `WITH_FOLD=0`**：骨架 + 序列设计很便宜，折叠很贵。等骨架出齐、确认没问题再折叠。
-
-只要某几个实验：
-
-```bash
-SINGLE_GPU=1 SCALE=half WITH_FOLD=0 ONLY="2 3 4" ./run_all.sh   # PPI / DNA / 小分子
-```
-
-### 步骤 5 —— 折叠（按需，单卡这是瓶颈）
-
-- 全量折叠（7.5 万次预测）单卡要**数周**，不要一次铺开。
-- 建议：① 只折叠通过几何初筛的子集；② 分批挂后台跑；③ 或者用 `FOLD_BACKEND=none`
-  先出骨架，把折叠放到别的机器/别的时段。
-
-```bash
-cd /backup01/zzj/protein/foundry/experiments/paper_rfd3
-SINGLE_GPU=1 FOLD_BACKEND=rf3 WITH_FOLD=1 SCALE=half ./run_all.sh
-```
+- 先 `WITH_FOLD=0` 出全部骨架 + 序列，确认质量；
+- 再只折叠通过几何初筛的子集；
+- 或用 `FOLD_BACKEND=none` 交给别的机器/时段分批做。
 
 ---
 
-## 3. 单卡并行度怎么设
+## 4. 单卡并行度原则
 
-一张卡上**不要**同时跑两个吃显存的任务 —— 会互相 OOM。正确做法是：
+一张卡上**不要**同时跑两个吃显存的任务 —— 会互相 OOM。正确做法：
 
 ```bash
-SINGLE_GPU=1 MAX_PARALLEL_GPUS=1 ./run_all.sh     # 所有条件串行铺在这一张卡上
+SINGLE_GPU=1 ./run_paper_seq.sh      # 自动挑空闲显存最多的卡 + 并行度锁 1
+GPUS=3      ./run_paper_seq.sh       # 或者显式指定卡
 ```
 
-`env.sh` 的 `SINGLE_GPU=1` 会自动挑空闲显存最多的卡，并把 `MAX_PARALLEL_GPUS` 锁成 1。
-要指定卡就 `GPUS=3`。
-
-CPU 侧的并行不受影响：`N_WORKERS`（MPNN/指标）和 `NUM_WORKERS`（DataLoader）
-照常拉满，它们和 GPU 是重叠利用的。
+`SINGLE_GPU=1` 会把 `MAX_PARALLEL_GPUS` 锁成 1，所有条件**串行**铺在这一张卡上。
+CPU 侧的并行不受影响（`N_WORKERS` / `NUM_WORKERS` 照常拉满，与 GPU 重叠利用）。
 
 ---
 
-## 4. 常见坑（都在脚本里处理了，但知道一下）
+## 5. 需要你手工补的输入
+
+PDF 里没有 Supplemental Methods，这两项必须自己补：
+
+**实验 5 —— AME 的 41 个活性位点案例**
+协议出自 RFdiffusion2 的 Nature Methods 论文（Ahern et al., doi:10.1038/s41592-025-02975-x），
+代码与案例清单在 <https://github.com/RosettaCommons/RFdiffusion2/>。
+模板由 `01_prepare_inputs.py` 生成到
+`out/inputs/targets/ame_cases.json`（含 `unindex` / `fixed_atoms` / `n_islands` 字段），补齐后重跑实验 5。
+
+**实验 9 —— DBRFD3 与半胱氨酸水解酶的 motif**
+放到 `out/inputs/motifs/`。缺文件时脚本会用占位文件跑通流程，但指标无意义。
+
+**PPI 的另外 3 个靶点**（Tie2 / IL-7Ra / IL-2Ra）：`02_extract_repo_benchmarks.py`
+已从仓库配置里导出定义，`01_prepare_inputs.py` 会尝试从镜像重建；
+仓库自带 PD-L1 与 InsulinR 两个裁剪结构。IL-7Ra 的 benchmark 定义确实缺失，需手工补。
+
+---
+
+## 6. 常见坑（脚本大多已处理，知道一下）
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| `OSError: [Errno 28] ... pymp-xxxx`，之后像卡住 | DataLoader worker 的 temp 目录泄漏，`/tmp` 写满 | `env.sh` 把 `TMPDIR` 挪到 `$OUT/_worker_tmp`；加 `PERSISTENT_WORKERS=1` |
-| `CUDA out of memory` | batch / crop / atoms 太大 | 降 `DIFFUSION_BATCH_SIZE`（推理）或 `DIFFUSION_BS`+`CROP_SIZE`（训练）；跑 `05_probe_vram.sh` 找边界 |
-| `nvidia-smi` 报"driver 通信失败"但命令存在 | 错误被写到 **stdout**，被当成显存值 | `05_probe_vram.sh` 已校验返回的是纯数字 |
-| 训练启动即退出、0 个 step | `MAX_EPOCHS=1` 时 ckpt 载入后 `current_epoch=1>=1`，训练循环整体跳过 | 想真的训就要 `MAX_EPOCHS>=2` |
-| 图/表里 lDDT 是空的 | 验证列名不是 `val/mean_lddt`，而是 `val/pdb_holdout/lddt.mean_lddt_protein` | 仓库根的 `fix_nmf_zkp_eval_errors.patch` 修的就是这个，确认已应用 |
-| 结果写到 `/dev/shm` 里被吃掉内存 | `OUT` 落在 tmpfs | `env.sh` 检测到 tmpfs 会自动改到 `$HOME/foundry_experiments`；也可 `OUT=/backup01/$USER/rfd3_out` |
+| `OSError: [Errno 28] ... pymp-xxxx`，之后像卡住 | worker temp 目录泄漏、`/tmp` 满 | `env.sh` 把 `TMPDIR` 挪到 `$OUT/_worker_tmp`；`PERSISTENT_WORKERS=1` 默认开 |
+| `CUDA out of memory` | batch 太大 | 降 `DIFFUSION_BATCH_SIZE`（推理）；跑 `05_probe_vram.sh` 找边界 |
+| `nvidia-smi` 报驱动通信失败但命令存在 | 错误写进 **stdout**，被当成显存值 | `05_probe_vram.sh` 已校验返回纯数字 |
+| `ModuleNotFoundError: No module named 'Bio'` | 缺 biopython | 装进运行环境：`$PY -m pip install biopython` |
+| `ModuleNotFoundError: No module named 'pandas'` | 选错解释器（在 `(base)` 里跑） | 用 `RC_ENV_BIN` 指到装了 foundry 的环境 |
+| 图/表里 lDDT 是空的 | 验证列名是 `val/pdb_holdout/lddt.mean_lddt_protein` 而非 `val/mean_lddt` | 仓库根的 `fix_nmf_zkp_eval_errors.patch` 修的就是这个，确认已应用 |
+| 结果写进 `/dev/shm` 吃掉内存 | `OUT` 落在 tmpfs | `env.sh` 检测到 tmpfs 会自动改到 `$HOME/foundry_experiments`；也可 `OUT=/backup01/$USER/rfd3_out` |
 
 ---
 
-## 5. 一句话的最优配置
+## 7. 最短路径（照着抄）
 
 ```bash
 cd /backup01/zzj/protein/foundry/experiments/paper_rfd3
 
-# 一次性：探出这张卡的显存上限
+# 一次性：探出这张卡的显存上限（20-40 分钟）
 GPU_ID=3 ./05_probe_vram.sh
 
-# 之后所有任务都用同一套前缀
-source ./env.sh && source ./lib.sh          # 自动加载 vram_profile.json
-export SINGLE_GPU=1                          # 单卡、串行、吃满 CPU
-export NUM_WORKERS=12 PREFETCH=6
-export PERSISTENT_WORKERS=1
+# 冒烟：验证全链路（约 1 小时）
+GPUS=3 SINGLE_GPU=1 SCALE=quick ./run_paper_seq.sh
 
-check_env                                     # 确认生效
-SCALE=quick ./run_all.sh                      # 冒烟
-SCALE=half  WITH_FOLD=0 ./run_all.sh          # 出骨架 + 序列
+# 半规模：出有统计意义的数据
+GPUS=3 SINGLE_GPU=1 SCALE=half ./run_paper_seq.sh
+
+# 报告在 out/reports/paper_experiments_report.md
 ```

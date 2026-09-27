@@ -1,0 +1,1 @@
+experiment,condition,design,fold,status,target_aligned_binder_rmsd,dna_aligned_protein_rmsd,backbone_rmsd,ligand_rmsd,motif_all_atom_rmsd,ligand_rasa,n_hbonds,n_clashes,n_interface_residues,interface_contact_preserved,interface_charge_preserved,com_shift,subunit_rmsd,n_chains,note
